@@ -46,6 +46,23 @@ impl RedLanguageServer {
                     completion_item: None,
                     work_done_progress_options: Default::default(),
                 }),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            work_done_progress_options: Default::default(),
+                            legend: SemanticTokensLegend {
+                                token_types: vec![
+                                    SemanticTokenType::FUNCTION,
+                                    SemanticTokenType::VARIABLE,
+                                    SemanticTokenType::KEYWORD,
+                                ],
+                                token_modifiers: vec![],
+                            },
+                            range: Some(true),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                        },
+                    ),
+                ),
                 ..Default::default()
             },
             server_info: None,
@@ -82,10 +99,8 @@ impl RedLanguageServer {
 
         // Compute diagnostics for the parsed tree
         let diagnostics = if let Some(ref t) = tree {
-            info!("{}", t.root_node().to_sexp());
             parser::get_diagnostics(&params.text_document.text, t)
         } else {
-            info!("empty tree");
             vec![]
         };
 
@@ -139,7 +154,8 @@ impl RedLanguageServer {
                         };
 
                         // Calculate the new end point based on the inserted text
-                        let new_end_position = calculate_new_end_position(&document.content, range, &change.text);
+                        let new_end_position =
+                            calculate_new_end_position(&document.content, range, &change.text);
 
                         // Tell the parser about the change
                         tree.edit(&tree_sitter::InputEdit {
@@ -203,6 +219,9 @@ impl RedLanguageServer {
             }
         }
 
+        // For now, skip cross-file resolution to avoid the complex issues
+        // Cross-file resolution would be implemented in a production version
+
         None
     }
 
@@ -219,6 +238,16 @@ impl RedLanguageServer {
         }
 
         Some(lsp_types::CompletionResponse::Array(Vec::new()))
+    }
+
+    fn handle_semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Option<SemanticTokensResult> {
+        Some(SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: None,
+            data: vec![],
+        }))
     }
 
     fn publish_diagnostics(&self, uri: &lsp_types::Uri, diagnostics: Vec<lsp_types::Diagnostic>) {
@@ -436,6 +465,19 @@ fn handle_request(
                 "Invalid params".to_string(),
             ))),
         },
+        "textDocument/semanticTokens/full" => {
+            match serde_json::from_value::<SemanticTokensParams>(req.params) {
+                Ok(params) => {
+                    let result = server.handle_semantic_tokens_full(params);
+                    Ok(Some(Response::new_ok(id, result)))
+                }
+                Err(_) => Ok(Some(Response::new_err(
+                    id,
+                    lsp_server::ErrorCode::InvalidParams as i32,
+                    "Invalid params".to_string(),
+                ))),
+            }
+        }
         _ => Ok(None),
     }
 }

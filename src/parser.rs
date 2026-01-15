@@ -1,4 +1,9 @@
-use lsp_types::{Diagnostic, DiagnosticSeverity, Location, Position, Range, *};
+use lsp_types::{
+    Diagnostic, DiagnosticSeverity, Location, Position, Range, SemanticToken, SemanticTokenType,
+    SemanticTokens, SemanticTokensLegend, *,
+};
+use std::collections::HashSet;
+use std::path::Path;
 use tree_sitter::{Node, Tree};
 
 // New function that accepts an existing tree for efficiency
@@ -220,6 +225,170 @@ pub fn get_completions(
     add_common_keywords(&mut completions);
 
     completions
+}
+
+// Function to provide semantic tokens
+pub fn get_semantic_tokens(source_code: &str, tree: &Tree) -> SemanticTokens {
+    // For now, just collect function names from the current document
+    // In a full implementation, we'd also parse included files
+    let mut function_names = HashSet::new();
+    let mut cursor = tree.walk();
+    collect_function_names_hashset(source_code, &mut cursor, &mut function_names);
+
+    // Then, collect semantic tokens using the function names
+    let mut tokens = Vec::new();
+    let mut cursor = tree.walk();
+    collect_semantic_tokens_hashset(source_code, &mut cursor, &mut tokens, &function_names);
+
+    SemanticTokens {
+        result_id: None,
+        data: tokens,
+    }
+}
+
+// Recursive function to collect function names from the tree using HashSet
+fn collect_function_names_hashset(
+    source_code: &str,
+    cursor: &mut tree_sitter::TreeCursor,
+    function_names: &mut HashSet<String>,
+) {
+    loop {
+        let node = cursor.node();
+
+        // Check if this node is a function definition
+        if is_function_definition_node(&node) {
+            // Extract the function name from the definition
+            if let Some(name) = extract_function_name(source_code, &node) {
+                function_names.insert(name);
+            }
+        }
+
+        // Recurse into children
+        if cursor.goto_first_child() {
+            collect_function_names_hashset(source_code, cursor, function_names);
+            cursor.goto_parent();
+        }
+
+        if !cursor.goto_next_sibling() {
+            break;
+        }
+    }
+}
+
+// Recursive function to collect semantic tokens from the tree using HashSet
+fn collect_semantic_tokens_hashset(
+    source_code: &str,
+    cursor: &mut tree_sitter::TreeCursor,
+    tokens: &mut Vec<SemanticToken>,
+    function_names: &HashSet<String>,
+) {
+    loop {
+        let node = cursor.node();
+
+        // Check if this node is an identifier or word
+        if node.kind() == "word" {
+            // Get the text of the node
+            if let Some(text) = get_node_text(source_code, &node) {
+                // Determine the token type based on whether it's a known function name
+                let token_type = if function_names.contains(text) {
+                    SemanticTokenType::FUNCTION
+                } else {
+                    SemanticTokenType::VARIABLE
+                };
+
+                // Create a semantic token
+                let token = SemanticToken {
+                    delta_line: node.start_position().row as u32,
+                    delta_start: node.start_position().column as u32,
+                    length: (node.end_byte() - node.start_byte()) as u32,
+                    token_type: get_token_type_index(token_type),
+                    token_modifiers_bitset: 0,
+                };
+
+                tokens.push(token);
+            }
+        }
+
+        // Recurse into children
+        if cursor.goto_first_child() {
+            collect_semantic_tokens_hashset(source_code, cursor, tokens, function_names);
+            cursor.goto_parent();
+        }
+
+        if !cursor.goto_next_sibling() {
+            break;
+        }
+    }
+}
+
+// Function to provide delta semantic tokens (for incremental updates)
+pub fn get_semantic_tokens_delta(source_code: &str, old_tree: &Tree, new_tree: &Tree, prev_tokens: &[SemanticToken]) -> Option<SemanticTokens> {
+    // For now, we'll return full tokens since computing deltas is complex
+    // In a production implementation, you'd compare the old and new trees
+    // and only return the changed tokens
+    Some(get_semantic_tokens(source_code, new_tree))
+}
+
+// Helper function to check if a node is a function definition
+fn is_function_definition_node(node: &Node) -> bool {
+    // In Red, function definitions often have specific patterns
+    // This could be "function_name: func [...]" or similar
+    node.kind() == "function"
+}
+
+// Helper function to extract function name from a definition node
+fn extract_function_name(source_code: &str, node: &Node) -> Option<String> {
+    // Look for the identifier on the left side of an assignment (the function name)
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "set_word" {
+            eprintln!("find name");
+            if let Some(text) = get_node_text(source_code, &child) {
+                eprintln!("{}", text);
+                return Some(text.to_string());
+            }
+        }
+    }
+    None
+}
+
+// Helper function to get the token type index
+fn get_token_type_index(token_type: SemanticTokenType) -> u32 {
+    // Compare the semantic token type by string value
+    if token_type.as_str() == "function" {
+        0
+    } else if token_type.as_str() == "variable" {
+        1
+    } else if token_type.as_str() == "keyword" {
+        2
+    } else {
+        1 // Default to variable
+    }
+}
+
+// Recursive function to collect function names from a tree
+fn collect_function_names_from_tree(source_code: &str, cursor: &mut tree_sitter::TreeCursor, function_names: &mut HashSet<String>) {
+    loop {
+        let node = cursor.node();
+
+        // Check if this node is a function definition
+        if is_function_definition_node(&node) {
+            // Extract the function name from the definition
+            if let Some(name) = extract_function_name(source_code, &node) {
+                function_names.insert(name);
+            }
+        }
+
+        // Recurse into children
+        if cursor.goto_first_child() {
+            collect_function_names_from_tree(source_code, cursor, function_names);
+            cursor.goto_parent();
+        }
+
+        if !cursor.goto_next_sibling() {
+            break;
+        }
+    }
 }
 
 // Recursive function to collect identifiers from the tree
