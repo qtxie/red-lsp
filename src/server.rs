@@ -46,12 +46,12 @@ impl RedLanguageServer {
     fn handle_initialize(&mut self, params: InitializeParams) -> Result<InitializeResult> {
         // Check client capabilities to determine which features to enable
         let client_capabilities = params.capabilities;
-        
+
         // Negotiate position encoding (UTF-8, UTF-16, or UTF-32)
         let position_encoding = self.negotiate_position_encoding(
             client_capabilities.general.as_ref().and_then(|g| g.position_encodings.as_ref())
         );
-        
+
         // Check if client supports semantic tokens
         let semantic_tokens_provider =
                 Some(SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
@@ -59,9 +59,6 @@ impl RedLanguageServer {
                         token_types: vec![
                             SemanticTokenType::FUNCTION,
                             SemanticTokenType::KEYWORD,
-                            SemanticTokenType::STRING,
-                            SemanticTokenType::NUMBER,
-                            SemanticTokenType::COMMENT,
                         ],
                         token_modifiers: vec![],
                     },
@@ -116,7 +113,7 @@ impl RedLanguageServer {
 
         Ok(result)
     }
-    
+
     fn negotiate_position_encoding(
         &self,
         client_encodings: Option<&Vec<PositionEncodingKind>>,
@@ -132,7 +129,7 @@ impl RedLanguageServer {
                 }
             }
         }
-        
+
         // Default to UTF-16 if no encoding specified
         PositionEncoding::Utf16
     }

@@ -5,23 +5,37 @@ Red-LSP is a language server for the Red programming language, implementing the 
 ## Features
 
 - **Go to Definition**: Navigate to the definition of functions, variables, and other symbols in your Red code
-- Syntax highlighting support through LSP
-- Parsing of Red language constructs using tree-sitter-red
-
-## Installation
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd red-lsp
-
-# Build the project
-cargo build --release
-```
+- **Code Completion**: Get intelligent suggestions for Red keywords, functions, and variables
+- **Semantic Highlighting**: Syntax highlighting support through LSP semantic tokens
+- **Incremental Parsing**: Efficient document updates using [tree-sitter-red](https://github.com/red/tree-sitter-red)
+- **Multiple Transport Modes**: Supports both STDIO and TCP connections
+- **Position Encoding Negotiation**: Supports UTF-8, UTF-16, and UTF-32 encodings
 
 ## Usage
 
-The language server can be integrated with any editor that supports LSP. For example, with VSCode, you would configure it to use this executable as the Red language server.
+### Standard IO Mode (Default)
+
+The language server can be integrated with any editor that supports LSP via stdio:
+
+```bash
+# Run in stdio mode (default)
+red-lsp
+```
+
+### TCP Mode
+
+For debugging or remote development, the server can also run in TCP mode:
+
+```bash
+# Run in TCP mode (default port 2087)
+red-lsp --tcp
+
+# Run in TCP mode with custom port
+red-lsp --tcp --port 3000
+
+# Run with verbose logging
+red-lsp --tcp --verbose
+```
 
 ## Architecture
 
@@ -30,30 +44,13 @@ The server uses:
 - `lsp-server` and `lsp-types` for LSP implementation
 - Custom logic for semantic analysis and feature implementation
 
-## Current Implementation
+## Build
 
-Currently, the "Go to Definition" feature works by:
-1. Parsing the entire file when opened using tree-sitter-red to create an AST
-2. Storing the parsed AST in memory for efficient access
-3. Incrementally updating the AST when document changes occur
-4. Identifying the symbol under the cursor by traversing the stored AST
-5. Finding the corresponding definition in the AST
-6. Returning the location of the definition
+```bash
+# Clone the repository
+git clone https://github.com/qtxie/red-lsp.git
+cd red-lsp
 
-The language server also includes diagnostic functionality that:
-1. Detects invalid tokens and syntax errors in the parsed tree
-2. Reports diagnostics to the client when files are opened or modified
-3. Highlights errors in the user's editor
-
-Additionally, the language server provides code completion functionality that:
-1. Suggests identifiers and function names found in the current document
-2. Provides common Red language keywords as completion options
-3. Triggers completion on '/' characters
-4. Offers context-aware suggestions based on the parsed AST
-
-## Future Enhancements
-
-- Cross-file symbol resolution
-- Hover information
-- Find all references
-- Rename symbol
+# Build the project
+cargo build --release
+```
