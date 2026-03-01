@@ -1,9 +1,9 @@
 use anyhow::Result;
 use crossbeam_channel::RecvTimeoutError;
+use hashbrown::HashMap;
 use lsp_server::{Connection, ExtractError, Message, Request, Response};
 use lsp_types::*;
 use ropey::Rope;
-use std::collections::HashMap;
 use tree_sitter::Parser;
 
 use crate::analyzer;
@@ -74,7 +74,6 @@ impl RedLanguageServer {
         // Store for later use
         self.client_supports_delta = client_supports_delta;
 
-        // Check if client supports semantic tokens
         let semantic_tokens_provider =
                 Some(SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
                     legend: SemanticTokensLegend {
@@ -89,7 +88,6 @@ impl RedLanguageServer {
                     ..Default::default()
             }));
 
-        // Check if client supports completion
         let completion_provider = Some(CompletionOptions {
                 resolve_provider: Some(false),
                 trigger_characters: Some(vec!["/".to_string(), " ".to_string()]),
@@ -97,13 +95,6 @@ impl RedLanguageServer {
                 completion_item: None,
                 work_done_progress_options: Default::default(),
             });
-
-        // Check if client supports definition/go-to-definition
-        let definition_provider = client_capabilities
-            .text_document
-            .as_ref()
-            .and_then(|td| td.definition.as_ref())
-            .map(|_| OneOf::Left(true));
 
         let result = InitializeResult {
             capabilities: ServerCapabilities {
@@ -114,7 +105,7 @@ impl RedLanguageServer {
                         ..Default::default()
                     },
                 )),
-                definition_provider,
+                definition_provider: Some(OneOf::Left(true)),
                 completion_provider,
                 semantic_tokens_provider,
                 ..Default::default()
@@ -170,7 +161,7 @@ impl RedLanguageServer {
             None,
         );
 
-        self.ctx.collect_identifiers(&params.text_document.text, &tree);
+        self.ctx.collect_identifiers(&params.text_document.text, &tree, &uri);
 
         let document = analyzer::Document {
             content,
@@ -503,7 +494,7 @@ fn generate_result_id() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    format!("tokens-{}", timestamp)
+    format!("{}", timestamp)
 }
 
 /// Compute delta between old and new token arrays
@@ -654,7 +645,9 @@ fn apply_content_change(rope: &mut Rope, new_text: &str, range: Range) {
     let end_offset = rope.line_to_char(end_line) + end_char;
 
     // Remove the old range and insert new text
-    rope.remove(start_offset..end_offset);
+    if end_offset > start_offset {
+        rope.remove(start_offset..end_offset);
+    }
     rope.insert(start_offset, new_text);
 }
 

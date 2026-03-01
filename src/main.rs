@@ -26,7 +26,7 @@ fn main() -> Result<()> {
         .and_then(|pos| args.get(pos + 1))
         .and_then(|port_str| port_str.parse::<u16>().ok())
         .unwrap_or(2087);
-    
+
     if tcp_mode {
         run_tcp_server(port)
     } else {
@@ -36,34 +36,34 @@ fn main() -> Result<()> {
 
 fn run_tcp_server(port: u16) -> Result<()> {
     let addr = format!("127.0.0.1:{}", port);
-    
+
     log::info!("LSP TCP server listening on {}", addr);
     log::info!("Configure your editor to connect to this port");
-    
+
     // Listen for client connection using lsp-server's built-in TCP support
     let (connection, io_threads) = Connection::listen(&addr)?;
-    
+
     log::info!("Client connected, LSP connection established via TCP");
-    
+
     // Run the server
     let result = run_server(&connection);
-    
+
     // Wait for IO threads to finish
     let _ = io_threads.join();
-    
+
     log::info!("TCP connection closed");
-    
+
     result
 }
 
 fn run_stdio_server() -> Result<()> {
     log::info!("LSP STDIO server starting");
-    
+
     // Create the transport
     let (connection, io_threads) = Connection::stdio();
 
     log::info!("LSP connection established via STDIO");
-    
+
     // Run the server and wait for the two threads to end
     let result = run_server(&connection);
 
