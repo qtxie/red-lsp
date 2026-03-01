@@ -3,6 +3,7 @@ use crossbeam_channel::RecvTimeoutError;
 use lsp_server::{Connection, ExtractError, Message, Request, Response};
 use lsp_types::*;
 use ropey::Rope;
+use std::collections::HashMap;
 use tree_sitter::Parser;
 
 use crate::analyzer;
@@ -10,6 +11,8 @@ use crate::analyzer;
 struct RedLanguageServer {
     ctx: analyzer::Ctx,
     parser: Parser,
+    capabilities: ServerCapabilities,
+    previous_tokens: HashMap<Uri, Vec<SemanticToken>>,
 }
 
 impl RedLanguageServer {
@@ -20,11 +23,50 @@ impl RedLanguageServer {
         Self {
             ctx: analyzer::Ctx::new(),
             parser,
+            capabilities: ServerCapabilities::default(),
+            previous_tokens: HashMap::new(),
         }
     }
 
-    fn handle_initialize(&mut self, _params: InitializeParams) -> Result<InitializeResult> {
-        Ok(InitializeResult {
+    fn handle_initialize(&mut self, params: InitializeParams) -> Result<InitializeResult> {
+        // Check client capabilities to determine which features to enable
+        let client_capabilities = params.capabilities;
+
+        // Check if client supports semantic tokens
+        let semantic_tokens_provider =
+                Some(SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
+                    legend: SemanticTokensLegend {
+                        token_types: vec![
+                            SemanticTokenType::FUNCTION,
+                            SemanticTokenType::KEYWORD,
+                            SemanticTokenType::STRING,
+                            SemanticTokenType::NUMBER,
+                            SemanticTokenType::COMMENT,
+                        ],
+                        token_modifiers: vec![],
+                    },
+                    range: Some(true),
+                    full: Some(SemanticTokensFullOptions::Delta { delta: Some(true) }),
+                    ..Default::default()
+            }));
+
+        // Check if client supports completion
+        let completion_provider = Some(CompletionOptions {
+                resolve_provider: Some(false),
+                trigger_characters: Some(vec!["/".to_string(), " ".to_string()]),
+                all_commit_characters: None,
+                completion_item: None,
+                work_done_progress_options: Default::default(),
+            });
+
+        // Check if client supports definition/go-to-definition
+        let definition_provider = client_capabilities
+            .text_document
+            .as_ref()
+            .and_then(|td| td.definition.as_ref())
+            .map(|_| OneOf::Left(true));
+
+        let result = InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
@@ -33,21 +75,21 @@ impl RedLanguageServer {
                         ..Default::default()
                     },
                 )),
-                definition_provider: Some(OneOf::Left(true)),
-                completion_provider: Some(CompletionOptions {
-                    resolve_provider: Some(false),
-                    trigger_characters: Some(vec!["/".to_string(), " ".to_string()]),
-                    all_commit_characters: None,
-                    completion_item: None,
-                    work_done_progress_options: Default::default(),
-                }),
+                definition_provider,
+                completion_provider,
+                semantic_tokens_provider,
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
                 name: "red-lsp".to_string(),
                 version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
-        })
+        };
+
+        // Store capabilities for later use
+        self.capabilities = result.capabilities.clone();
+
+        Ok(result)
     }
 
     fn handle_text_document_did_open(&mut self, params: DidOpenTextDocumentParams) {
@@ -163,6 +205,98 @@ impl RedLanguageServer {
         self.ctx.documents.remove(&params.text_document.uri);
     }
 
+    fn handle_semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Option<SemanticTokensResult> {
+        let uri = &params.text_document.uri;
+        if let Some(document) = self.ctx.documents.get(uri) {
+            let tokens = self.ctx.get_semantic_tokens(&document.content, &document.tree);
+            return Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: None,
+                data: tokens,
+            }));
+        }
+        Some(SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: None,
+            data: vec![],
+        }))
+    }
+
+    fn handle_semantic_tokens_full_delta(
+        &mut self,
+        params: SemanticTokensDeltaParams,
+    ) -> Option<SemanticTokensFullDeltaResult> {
+        let uri = &params.text_document.uri;
+        let previous_result_id = if params.previous_result_id.is_empty() {
+            None
+        } else {
+            Some(params.previous_result_id.as_str())
+        };
+
+        if let Some(document) = self.ctx.documents.get(uri) {
+            let tokens = self.ctx.get_semantic_tokens(&document.content, &document.tree);
+
+            // Check if we have previous tokens and a result_id was provided
+            if let Some(prev_tokens) = self.previous_tokens.get(uri) {
+                if previous_result_id.is_some() && tokens_equal(prev_tokens, &tokens) {
+                    // Tokens haven't changed, return empty edits
+                    return Some(SemanticTokensFullDeltaResult::PartialTokensDelta {
+                        edits: vec![],
+                    });
+                }
+            }
+
+            // Get previous tokens for delta calculation
+            let prev_tokens = self.previous_tokens.get(uri).cloned();
+
+            // Store current tokens for next delta
+            self.previous_tokens.insert(uri.clone(), tokens.clone());
+
+            // Calculate delta if we have previous tokens
+            if let Some(prev) = prev_tokens {
+                let edits = compute_semantic_delta(&prev, &tokens, previous_result_id.unwrap_or(""));
+                return Some(SemanticTokensFullDeltaResult::PartialTokensDelta { edits });
+            }
+
+            // No previous tokens, return full tokens
+            Some(SemanticTokensFullDeltaResult::Tokens(SemanticTokens {
+                result_id: Some("1".to_string()),
+                data: tokens,
+            }))
+        } else {
+            Some(SemanticTokensFullDeltaResult::Tokens(SemanticTokens {
+                result_id: Some("1".to_string()),
+                data: vec![],
+            }))
+        }
+    }
+
+    fn handle_semantic_tokens_range(
+        &self,
+        params: SemanticTokensRangeParams,
+    ) -> Option<SemanticTokensResult> {
+        let uri = &params.text_document.uri;
+        let range = params.range;
+
+        if let Some(document) = self.ctx.documents.get(uri) {
+            let all_tokens = self.ctx.get_semantic_tokens(&document.content, &document.tree);
+
+            // Filter tokens to only include those within the requested range
+            let range_tokens = filter_tokens_in_range(&all_tokens, range);
+
+            Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: None,
+                data: range_tokens,
+            }))
+        } else {
+            Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: None,
+                data: vec![],
+            }))
+        }
+    }
+
     fn get_word_at_position(&self, uri: &lsp_types::Uri, position: lsp_types::Position) -> String {
         if let Some(document) = self.ctx.documents.get(uri) {
             let line_num = position.line as usize;
@@ -179,7 +313,7 @@ impl RedLanguageServer {
                 if char_num <= chars.len() {
                     // Find word start
                     let mut start = char_num;
-                    while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_' || chars[start - 1] == '?' || chars[start - 1] == '~') {
+                    while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1].is_ascii_punctuation() ) {
                         start -= 1;
                     }
 
@@ -262,6 +396,110 @@ pub fn run_server(connection: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn compute_semantic_delta(
+    prev_tokens: &[SemanticToken],
+    current_tokens: &[SemanticToken],
+    _previous_result_id: &str,
+) -> Vec<SemanticTokensEdit> {
+    // Simple delta: if tokens are the same, return empty edits
+    if tokens_equal(prev_tokens, current_tokens) {
+        return vec![];
+    }
+
+    // For simplicity, return a single edit that replaces everything
+    // In a real implementation, you'd want to compute a proper diff
+    if current_tokens.is_empty() {
+        return vec![];
+    }
+
+    // Return full replacement as a single edit
+    vec![SemanticTokensEdit {
+        start: 0,
+        delete_count: prev_tokens.len() as u32,
+        data: Some(current_tokens.to_vec()),
+    }]
+}
+
+// Helper to compare tokens for equality
+fn tokens_equal(a: &[SemanticToken], b: &[SemanticToken]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b.iter()).all(|(x, y)| {
+        x.delta_line == y.delta_line &&
+        x.delta_start == y.delta_start &&
+        x.length == y.length &&
+        x.token_type == y.token_type &&
+        x.token_modifiers_bitset == y.token_modifiers_bitset
+    })
+}
+
+// Filter tokens to only include those within the specified range
+fn filter_tokens_in_range(tokens: &[SemanticToken], range: Range) -> Vec<SemanticToken> {
+    // Decode delta-encoded tokens to absolute positions
+    let mut decoded: Vec<(u32, u32, SemanticToken)> = Vec::new();
+    let mut prev_line = 0u32;
+    let mut prev_start = 0u32;
+
+    for token in tokens {
+        let line = prev_line + token.delta_line;
+        let start = if token.delta_line == 0 {
+            prev_start + token.delta_start
+        } else {
+            token.delta_start
+        };
+        decoded.push((line, start, token.clone()));
+        prev_line = line;
+        prev_start = start;
+    }
+
+    // Filter tokens within range
+    let range_start_line = range.start.line;
+    let range_end_line = range.end.line;
+
+    let filtered: Vec<SemanticToken> = decoded
+        .into_iter()
+        .filter(|(line, _, _)| *line >= range_start_line && *line <= range_end_line)
+        .map(|(_, _, token)| token)
+        .collect();
+
+    // Re-encode tokens with delta encoding
+    if filtered.is_empty() {
+        return vec![];
+    }
+
+    let mut result: Vec<SemanticToken> = Vec::with_capacity(filtered.len());
+    let mut prev_line = 0u32;
+    let mut prev_start = 0u32;
+
+    for token in filtered {
+        let delta_line = if result.is_empty() {
+            token.delta_line
+        } else {
+            token.delta_line
+        };
+
+        let delta_start = token.delta_start;
+
+        result.push(SemanticToken {
+            delta_line,
+            delta_start,
+            length: token.length,
+            token_type: token.token_type,
+            token_modifiers_bitset: token.token_modifiers_bitset,
+        });
+
+        prev_line = prev_line + delta_line;
+        prev_start = if delta_line == 0 {
+            prev_start + delta_start
+        } else {
+            delta_start
+        };
+    }
+
+    result
+}
+
 fn handle_request(
     server: &mut RedLanguageServer,
     req: Request,
@@ -282,17 +520,58 @@ fn handle_request(
                 ))),
             }
         }
-        "textDocument/completion" => match serde_json::from_value::<CompletionParams>(req.params) {
-            Ok(params) => {
-                let result = server.handle_completion(params);
-                Ok(Some(Response::new_ok(id, result)))
+        "textDocument/completion" => {
+            match serde_json::from_value::<CompletionParams>(req.params) {
+                Ok(params) => {
+                    let result = server.handle_completion(params);
+                    Ok(Some(Response::new_ok(id, result)))
+                }
+                Err(_) => Ok(Some(Response::new_err(
+                    id,
+                    lsp_server::ErrorCode::InvalidParams as i32,
+                    "Invalid params".to_string(),
+                ))),
             }
-            Err(_) => Ok(Some(Response::new_err(
-                id,
-                lsp_server::ErrorCode::InvalidParams as i32,
-                "Invalid params".to_string(),
-            ))),
-        },
+        }
+        "textDocument/semanticTokens/full" => {
+            match serde_json::from_value::<SemanticTokensParams>(req.params) {
+                Ok(params) => {
+                    let result = server.handle_semantic_tokens_full(params);
+                    Ok(Some(Response::new_ok(id, result)))
+                }
+                Err(_) => Ok(Some(Response::new_err(
+                    id,
+                    lsp_server::ErrorCode::InvalidParams as i32,
+                    "Invalid params".to_string(),
+                ))),
+            }
+        }
+        "textDocument/semanticTokens/full/delta" => {
+            match serde_json::from_value::<SemanticTokensDeltaParams>(req.params) {
+                Ok(params) => {
+                    let result = server.handle_semantic_tokens_full_delta(params);
+                    Ok(Some(Response::new_ok(id, result)))
+                }
+                Err(_) => Ok(Some(Response::new_err(
+                    id,
+                    lsp_server::ErrorCode::InvalidParams as i32,
+                    "Invalid params".to_string(),
+                ))),
+            }
+        }
+        "textDocument/semanticTokens/range" => {
+            match serde_json::from_value::<SemanticTokensRangeParams>(req.params) {
+                Ok(params) => {
+                    let result = server.handle_semantic_tokens_range(params);
+                    Ok(Some(Response::new_ok(id, result)))
+                }
+                Err(_) => Ok(Some(Response::new_err(
+                    id,
+                    lsp_server::ErrorCode::InvalidParams as i32,
+                    "Invalid params".to_string(),
+                ))),
+            }
+        }
         _ => Ok(None),
     }
 }

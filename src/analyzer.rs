@@ -1,11 +1,9 @@
 use std::collections::HashMap;
-use lsp_types::Uri;
+use lsp_types::{SemanticToken, Uri};
 use ropey::Rope;
 use tree_sitter::Tree;
 use compact_str::CompactString;
-use fast_radix_trie::StringRadixMap;
-use url::Url;
-use std::fs;
+use fast_radix_trie::{StringRadixMap, StringRadixSet};
 
 pub struct Document {
     pub content: Rope,
@@ -15,6 +13,7 @@ pub struct Document {
 pub struct Ctx {
     pub documents: HashMap<Uri, Document>,
     pub symbols: Symbols,
+    pub functions: StringRadixSet,
 }
 
 fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&'a str> {
@@ -33,6 +32,7 @@ impl Ctx {
         Self {
             documents: HashMap::new(),
             symbols: Symbols::new(),
+            functions: StringRadixSet::new(),
         }
     }
 
@@ -40,11 +40,30 @@ impl Ctx {
     pub fn walk_tree(&mut self, source_code: &str, cursor: &mut tree_sitter::TreeCursor) {
         loop {
             let node = cursor.node();
+            let kind = node.kind();
 
             // Check if this node is an identifier or function name
-            if node.kind() == "word" || node.kind() == "set_word" {
-                let text = get_node_text(source_code, &node).unwrap_or("");
+            if kind == "word" || kind == "set_word" {
+                let mut text = get_node_text(source_code, &node).unwrap_or("");
+                if kind == "set_word" {
+                    text = text.trim_end_matches(':');
+                }
                 self.symbols.insert(text);
+            }
+
+            // Highlight function definitions (set_word followed by function body)
+            // In Red: func-name: func [...] [...]
+            if kind == "function" || kind == "does" {
+                // Find the function name
+                if let Some(name_node) = node.child(0) {
+                    if name_node.kind() == "set_word" {
+                        if let Some(text) = get_node_text(source_code, &name_node) {
+                            // Remove the trailing colon for set_word
+                            let name = text.trim_end_matches(':');
+                            self.functions.insert(name.to_lowercase());
+                        }
+                    }
+                }
             }
 
             // Recurse into children
@@ -63,6 +82,64 @@ impl Ctx {
         if let Some(tree) = tree {
             let mut cursor = tree.walk();
             self.walk_tree(source_code, &mut cursor);
+        }
+    }
+
+    pub fn get_semantic_tokens(&self, content: &Rope, tree: &Option<Tree>) -> Vec<SemanticToken> {
+        let mut tokens: Vec<(u32, u32, u32, u32, u32)> = Vec::new();
+
+        if let Some(tree) = tree {
+            let source_code = content.to_string();
+            let mut cursor = tree.walk();
+            self.collect_function_tokens(&source_code, &mut cursor, &mut tokens);
+        }
+
+        encode_semantic_tokens(&tokens)
+    }
+
+    fn collect_function_tokens(
+        &self,
+        source_code: &str,
+        cursor: &mut tree_sitter::TreeCursor,
+        tokens: &mut Vec<(u32, u32, u32, u32, u32)>,
+    ) {
+        loop {
+            let node = cursor.node();
+            let kind = node.kind();
+
+            // Also highlight word nodes as references
+            if kind == "word" {
+                if let Some(text) = get_node_text(source_code, &node) {
+                    let start_line = node.start_position().row as u32;
+                    let start_col = node.start_position().column as u32;
+                    let end_line = node.end_position().row as u32;
+                    let end_col = node.end_position().column as u32;
+
+                    // Check if this word is a known function
+                    let normalized = text.to_lowercase();
+                    if self.functions.contains(&normalized) {
+                        // Token type index: 0 = FUNCTION (matches legend order in capabilities)
+                        let token_type = 0u32;
+                        let token_modifiers = 0u32;
+                        let length = if start_line == end_line {
+                            end_col - start_col
+                        } else {
+                            1
+                        };
+                        tokens.push((start_line, start_col, length, token_type, token_modifiers));
+                    }
+                }
+            }
+
+            // Recurse into children
+            if cursor.goto_first_child() {
+                self.collect_function_tokens(source_code, cursor, tokens);
+                cursor.goto_parent();
+            }
+
+            if !cursor.goto_next_sibling() {
+                break;
+            }
         }
     }
 }
@@ -144,16 +221,41 @@ impl Symbols {
     }
 }
 
-fn read_file_from_uri(uri: &Uri) -> Result<String, Box<dyn std::error::Error>> {
-    // 1. Convert lsp_types::Uri to url::Url
-    let url = Url::parse(uri.as_str())?;
+fn encode_semantic_tokens(tokens: &Vec<(u32, u32, u32, u32, u32)>) -> Vec<SemanticToken> {
+    // LSP semantic tokens use delta encoding:
+    // Each token is 5 u32 values: delta_line, delta_start, length, token_type, token_modifiers
+    // delta_line = token_line - previous_token_line
+    // delta_start = token_start - previous_token_start (if same line, else just token_start)
 
-    // 2. Convert Url to a local PathBuf
-    let path = url
-        .to_file_path()
-        .map_err(|_| "URI is not a valid local file path")?;
+    let mut result: Vec<SemanticToken> = Vec::with_capacity(tokens.len());
+    let mut prev_line = 0u32;
+    let mut prev_start = 0u32;
 
-    // 3. Read the file
-    let content = fs::read_to_string(path)?;
-    Ok(content)
+    // Sort tokens by line and column
+    let mut sorted_tokens = tokens.clone();
+    sorted_tokens.sort_by(|a, b| {
+        a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1))
+    });
+
+    for (start_line, start_col, length, token_type, token_modifiers) in sorted_tokens {
+        let delta_line = start_line - prev_line;
+        let delta_start = if delta_line == 0 {
+            start_col - prev_start
+        } else {
+            start_col
+        };
+
+        result.push(SemanticToken {
+            delta_line,
+            delta_start,
+            length,
+            token_type,
+            token_modifiers_bitset: token_modifiers,
+        });
+
+        prev_line = start_line;
+        prev_start = start_col;
+    }
+
+    result
 }
