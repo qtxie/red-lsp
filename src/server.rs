@@ -8,11 +8,25 @@ use tree_sitter::Parser;
 
 use crate::analyzer;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PositionEncoding {
+    Utf8,
+    Utf16,
+    Utf32,
+}
+
+impl Default for PositionEncoding {
+    fn default() -> Self {
+        PositionEncoding::Utf16
+    }
+}
+
 struct RedLanguageServer {
     ctx: analyzer::Ctx,
     parser: Parser,
     capabilities: ServerCapabilities,
     previous_tokens: HashMap<Uri, Vec<SemanticToken>>,
+    position_encoding: PositionEncoding,
 }
 
 impl RedLanguageServer {
@@ -25,13 +39,19 @@ impl RedLanguageServer {
             parser,
             capabilities: ServerCapabilities::default(),
             previous_tokens: HashMap::new(),
+            position_encoding: PositionEncoding::default(),
         }
     }
 
     fn handle_initialize(&mut self, params: InitializeParams) -> Result<InitializeResult> {
         // Check client capabilities to determine which features to enable
         let client_capabilities = params.capabilities;
-
+        
+        // Negotiate position encoding (UTF-8, UTF-16, or UTF-32)
+        let position_encoding = self.negotiate_position_encoding(
+            client_capabilities.general.as_ref().and_then(|g| g.position_encodings.as_ref())
+        );
+        
         // Check if client supports semantic tokens
         let semantic_tokens_provider =
                 Some(SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
@@ -82,14 +102,39 @@ impl RedLanguageServer {
             },
             server_info: Some(ServerInfo {
                 name: "red-lsp".to_string(),
-                version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                version: Some(format!("{} ({})", env!("CARGO_PKG_VERSION"), match position_encoding {
+                    PositionEncoding::Utf8 => "UTF-8",
+                    PositionEncoding::Utf16 => "UTF-16",
+                    PositionEncoding::Utf32 => "UTF-32",
+                })),
             }),
         };
 
-        // Store capabilities for later use
+        // Store capabilities and encoding for later use
         self.capabilities = result.capabilities.clone();
+        self.position_encoding = position_encoding;
 
         Ok(result)
+    }
+    
+    fn negotiate_position_encoding(
+        &self,
+        client_encodings: Option<&Vec<PositionEncodingKind>>,
+    ) -> PositionEncoding {
+        // Server preference order: UTF-8 > UTF-16 > UTF-32
+        if let Some(encodings) = client_encodings {
+            for encoding in encodings {
+                match encoding.as_str() {
+                    "utf-8" => return PositionEncoding::Utf8,
+                    "utf-16" => return PositionEncoding::Utf16,
+                    "utf-32" => return PositionEncoding::Utf32,
+                    _ => {}
+                }
+            }
+        }
+        
+        // Default to UTF-16 if no encoding specified
+        PositionEncoding::Utf16
     }
 
     fn handle_text_document_did_open(&mut self, params: DidOpenTextDocumentParams) {
