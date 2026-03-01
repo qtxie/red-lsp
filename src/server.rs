@@ -8,6 +8,12 @@ use tree_sitter::Parser;
 
 use crate::analyzer;
 
+#[derive(Debug, Clone)]
+struct SemanticTokensCache {
+    tokens: Vec<SemanticToken>,
+    result_id: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum PositionEncoding {
     Utf8,
@@ -24,9 +30,10 @@ impl Default for PositionEncoding {
 struct RedLanguageServer {
     ctx: analyzer::Ctx,
     parser: Parser,
-    capabilities: ServerCapabilities,
-    previous_tokens: HashMap<Uri, Vec<SemanticToken>>,
+    capabilities: ClientCapabilities,
     position_encoding: PositionEncoding,
+    semantic_tokens_cache: HashMap<Uri, SemanticTokensCache>,
+    client_supports_delta: bool,
 }
 
 impl RedLanguageServer {
@@ -37,9 +44,10 @@ impl RedLanguageServer {
         Self {
             ctx: analyzer::Ctx::new(),
             parser,
-            capabilities: ServerCapabilities::default(),
-            previous_tokens: HashMap::new(),
+            capabilities: ClientCapabilities::default(),
             position_encoding: PositionEncoding::default(),
+            semantic_tokens_cache: HashMap::new(),
+            client_supports_delta: false,
         }
     }
 
@@ -51,6 +59,20 @@ impl RedLanguageServer {
         let position_encoding = self.negotiate_position_encoding(
             client_capabilities.general.as_ref().and_then(|g| g.position_encodings.as_ref())
         );
+
+        // Check if client supports semantic tokens delta
+        let client_supports_delta = client_capabilities
+            .text_document
+            .as_ref()
+            .and_then(|td| td.semantic_tokens.as_ref())
+            .and_then(|st| st.requests.full.as_ref())
+            .map_or(false, |full| match full {
+                SemanticTokensFullOptions::Bool(_) => false,
+                SemanticTokensFullOptions::Delta { delta } => delta.unwrap_or(false),
+            });
+
+        // Store for later use
+        self.client_supports_delta = client_supports_delta;
 
         // Check if client supports semantic tokens
         let semantic_tokens_provider =
@@ -108,7 +130,7 @@ impl RedLanguageServer {
         };
 
         // Store capabilities and encoding for later use
-        self.capabilities = result.capabilities.clone();
+        self.capabilities = client_capabilities;
         self.position_encoding = position_encoding;
 
         Ok(result)
@@ -245,73 +267,106 @@ impl RedLanguageServer {
 
     fn handle_text_document_did_close(&mut self, params: DidCloseTextDocumentParams) {
         self.ctx.documents.remove(&params.text_document.uri);
+        self.semantic_tokens_cache.remove(&params.text_document.uri);
     }
 
     fn handle_semantic_tokens_full(
-        &self,
+        &mut self,
         params: SemanticTokensParams,
     ) -> Option<SemanticTokensResult> {
-        let uri = &params.text_document.uri;
-        if let Some(document) = self.ctx.documents.get(uri) {
+        let uri = params.text_document.uri.clone();
+        if let Some(document) = self.ctx.documents.get(&uri) {
             let tokens = self.ctx.get_semantic_tokens(&document.content, &document.tree);
-            return Some(SemanticTokensResult::Tokens(SemanticTokens {
-                result_id: None,
+
+            // Update cache with new result_id
+            let result_id = generate_result_id();
+
+            if self.client_supports_delta {
+                self.semantic_tokens_cache.insert(uri, SemanticTokensCache {
+                    tokens: tokens.clone(),
+                    result_id: result_id.clone(),
+                });
+            }
+
+            Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: Some(result_id),
                 data: tokens,
-            }));
+            }))
+        } else {
+            Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: Some(generate_result_id()),
+                data: vec![],
+            }))
         }
-        Some(SemanticTokensResult::Tokens(SemanticTokens {
-            result_id: None,
-            data: vec![],
-        }))
     }
 
     fn handle_semantic_tokens_full_delta(
         &mut self,
         params: SemanticTokensDeltaParams,
     ) -> Option<SemanticTokensFullDeltaResult> {
-        let uri = &params.text_document.uri;
-        let previous_result_id = if params.previous_result_id.is_empty() {
-            None
-        } else {
-            Some(params.previous_result_id.as_str())
-        };
+        let uri = params.text_document.uri.clone();
+        let previous_result_id = params.previous_result_id;
 
-        if let Some(document) = self.ctx.documents.get(uri) {
-            let tokens = self.ctx.get_semantic_tokens(&document.content, &document.tree);
+        // 1. Fetch previous state from cache
+        let cached = self.semantic_tokens_cache.get(&uri);
 
-            // Check if we have previous tokens and a result_id was provided
-            if let Some(prev_tokens) = self.previous_tokens.get(uri) {
-                if previous_result_id.is_some() && tokens_equal(prev_tokens, &tokens) {
-                    // Tokens haven't changed, return empty edits
+        // 2. Check if the result_id matches our cache
+        if let Some(old) = cached {
+            if old.result_id == previous_result_id {
+                // Cache hit! Compute delta
+                if let Some(document) = self.ctx.documents.get(&uri) {
+                    let current_tokens = self.ctx.get_semantic_tokens(&document.content, &document.tree);
+
+                    // Check if tokens actually changed
+                    if old.tokens == current_tokens {
+                        // No changes - return empty edits
+                        return Some(SemanticTokensFullDeltaResult::PartialTokensDelta {
+                            edits: vec![],
+                        });
+                    }
+
+                    // Compute the minimal edit
+                    let edits = compute_semantic_delta(&old.tokens, &current_tokens);
+
+                    // Update cache with new result_id
+                    let result_id = generate_result_id();
+                    self.semantic_tokens_cache.insert(uri, SemanticTokensCache {
+                        tokens: current_tokens.clone(),
+                        result_id: result_id.clone(),
+                    });
+
                     return Some(SemanticTokensFullDeltaResult::PartialTokensDelta {
-                        edits: vec![],
+                        edits,
                     });
                 }
             }
-
-            // Get previous tokens for delta calculation
-            let prev_tokens = self.previous_tokens.get(uri).cloned();
-
-            // Store current tokens for next delta
-            self.previous_tokens.insert(uri.clone(), tokens.clone());
-
-            // Calculate delta if we have previous tokens
-            if let Some(prev) = prev_tokens {
-                let edits = compute_semantic_delta(&prev, &tokens, previous_result_id.unwrap_or(""));
-                return Some(SemanticTokensFullDeltaResult::PartialTokensDelta { edits });
-            }
-
-            // No previous tokens, return full tokens
-            Some(SemanticTokensFullDeltaResult::Tokens(SemanticTokens {
-                result_id: Some("1".to_string()),
-                data: tokens,
-            }))
-        } else {
-            Some(SemanticTokensFullDeltaResult::Tokens(SemanticTokens {
-                result_id: Some("1".to_string()),
-                data: vec![],
-            }))
         }
+
+        // 3. Fallback: Cache miss or ID mismatch - return FULL response
+        self.handle_semantic_tokens_full_inner(uri)
+    }
+
+    // Helper function for returning full tokens
+    fn handle_semantic_tokens_full_inner(&mut self, uri: Uri) -> Option<SemanticTokensFullDeltaResult> {
+        if let Some(document) = self.ctx.documents.get(&uri) {
+            let full_tokens = self.ctx.get_semantic_tokens(&document.content, &document.tree);
+            let result_id = generate_result_id();
+            self.semantic_tokens_cache.insert(uri, SemanticTokensCache {
+                tokens: full_tokens.clone(),
+                result_id: result_id.clone(),
+            });
+
+            return Some(SemanticTokensFullDeltaResult::Tokens(SemanticTokens {
+                result_id: Some(result_id),
+                data: full_tokens,
+            }));
+        }
+
+        // Document not found - return empty response
+        Some(SemanticTokensFullDeltaResult::Tokens(SemanticTokens {
+            result_id: Some(generate_result_id()),
+            data: vec![],
+        }))
     }
 
     fn handle_semantic_tokens_range(
@@ -322,10 +377,12 @@ impl RedLanguageServer {
         let range = params.range;
 
         if let Some(document) = self.ctx.documents.get(uri) {
-            let all_tokens = self.ctx.get_semantic_tokens(&document.content, &document.tree);
-
-            // Filter tokens to only include those within the requested range
-            let range_tokens = filter_tokens_in_range(&all_tokens, range);
+            // Get tokens only within the requested range - no filtering needed
+            let range_tokens = self.ctx.get_semantic_tokens_in_range(
+                &document.content,
+                &document.tree,
+                Some(range),
+            );
 
             Some(SemanticTokensResult::Tokens(SemanticTokens {
                 result_id: None,
@@ -438,108 +495,53 @@ pub fn run_server(connection: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn compute_semantic_delta(
-    prev_tokens: &[SemanticToken],
-    current_tokens: &[SemanticToken],
-    _previous_result_id: &str,
-) -> Vec<SemanticTokensEdit> {
-    // Simple delta: if tokens are the same, return empty edits
-    if tokens_equal(prev_tokens, current_tokens) {
+/// Generate a unique result_id for semantic tokens caching
+/// In production, use a proper UUID or hash-based ID
+fn generate_result_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    format!("tokens-{}", timestamp)
+}
+
+/// Compute delta between old and new token arrays
+/// Returns edits needed to transform old tokens into new tokens
+/// Uses a two-pointer approach to find the minimal diff range
+fn compute_semantic_delta(old_tokens: &[SemanticToken], new_tokens: &[SemanticToken]) -> Vec<SemanticTokensEdit> {
+    // If tokens are identical, no edits needed
+    if old_tokens == new_tokens {
         return vec![];
     }
 
-    // For simplicity, return a single edit that replaces everything
-    // In a real implementation, you'd want to compute a proper diff
-    if current_tokens.is_empty() {
-        return vec![];
+    let len_old = old_tokens.len();
+    let len_new = new_tokens.len();
+    let max_len = std::cmp::min(len_old, len_new);
+
+    // 1. Find the first index where they differ (from the start)
+    let mut start = 0;
+    while start < max_len && old_tokens[start] == new_tokens[start] {
+        start += 1;
     }
 
-    // Return full replacement as a single edit
+    // 2. Find the end boundary of the difference (from the end)
+    let mut end_old = len_old;
+    let mut end_new = len_new;
+    while end_old > start && end_new > start && old_tokens[end_old - 1] == new_tokens[end_new - 1] {
+        end_old -= 1;
+        end_new -= 1;
+    }
+
+    // 3. Construct the edit
+    // start: index in the old array where changes begin
+    // delete_count: how many elements to remove from old array
+    // data: the new elements to insert
     vec![SemanticTokensEdit {
-        start: 0,
-        delete_count: prev_tokens.len() as u32,
-        data: Some(current_tokens.to_vec()),
+        start: start as u32,
+        delete_count: (end_old - start) as u32,
+        data: Some(new_tokens[start..end_new].to_vec()),
     }]
-}
-
-// Helper to compare tokens for equality
-fn tokens_equal(a: &[SemanticToken], b: &[SemanticToken]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.iter().zip(b.iter()).all(|(x, y)| {
-        x.delta_line == y.delta_line &&
-        x.delta_start == y.delta_start &&
-        x.length == y.length &&
-        x.token_type == y.token_type &&
-        x.token_modifiers_bitset == y.token_modifiers_bitset
-    })
-}
-
-// Filter tokens to only include those within the specified range
-fn filter_tokens_in_range(tokens: &[SemanticToken], range: Range) -> Vec<SemanticToken> {
-    // Decode delta-encoded tokens to absolute positions
-    let mut decoded: Vec<(u32, u32, SemanticToken)> = Vec::new();
-    let mut prev_line = 0u32;
-    let mut prev_start = 0u32;
-
-    for token in tokens {
-        let line = prev_line + token.delta_line;
-        let start = if token.delta_line == 0 {
-            prev_start + token.delta_start
-        } else {
-            token.delta_start
-        };
-        decoded.push((line, start, token.clone()));
-        prev_line = line;
-        prev_start = start;
-    }
-
-    // Filter tokens within range
-    let range_start_line = range.start.line;
-    let range_end_line = range.end.line;
-
-    let filtered: Vec<SemanticToken> = decoded
-        .into_iter()
-        .filter(|(line, _, _)| *line >= range_start_line && *line <= range_end_line)
-        .map(|(_, _, token)| token)
-        .collect();
-
-    // Re-encode tokens with delta encoding
-    if filtered.is_empty() {
-        return vec![];
-    }
-
-    let mut result: Vec<SemanticToken> = Vec::with_capacity(filtered.len());
-    let mut prev_line = 0u32;
-    let mut prev_start = 0u32;
-
-    for token in filtered {
-        let delta_line = if result.is_empty() {
-            token.delta_line
-        } else {
-            token.delta_line
-        };
-
-        let delta_start = token.delta_start;
-
-        result.push(SemanticToken {
-            delta_line,
-            delta_start,
-            length: token.length,
-            token_type: token.token_type,
-            token_modifiers_bitset: token.token_modifiers_bitset,
-        });
-
-        prev_line = prev_line + delta_line;
-        prev_start = if delta_line == 0 {
-            prev_start + delta_start
-        } else {
-            delta_start
-        };
-    }
-
-    result
 }
 
 fn handle_request(

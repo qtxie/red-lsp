@@ -86,12 +86,21 @@ impl Ctx {
     }
 
     pub fn get_semantic_tokens(&self, content: &Rope, tree: &Option<Tree>) -> Vec<SemanticToken> {
+        self.get_semantic_tokens_in_range(content, tree, None)
+    }
+
+    pub fn get_semantic_tokens_in_range(
+        &self,
+        content: &Rope,
+        tree: &Option<Tree>,
+        range: Option<lsp_types::Range>,
+    ) -> Vec<SemanticToken> {
         let mut tokens: Vec<(u32, u32, u32, u32, u32)> = Vec::new();
 
         if let Some(tree) = tree {
             let source_code = content.to_string();
             let mut cursor = tree.walk();
-            self.collect_function_tokens(&source_code, &mut cursor, &mut tokens);
+            self.collect_function_tokens(&source_code, &mut cursor, &mut tokens, range);
         }
 
         encode_semantic_tokens(&tokens)
@@ -102,6 +111,7 @@ impl Ctx {
         source_code: &str,
         cursor: &mut tree_sitter::TreeCursor,
         tokens: &mut Vec<(u32, u32, u32, u32, u32)>,
+        range: Option<lsp_types::Range>,
     ) {
         loop {
             let node = cursor.node();
@@ -111,6 +121,22 @@ impl Ctx {
             if kind == "word" {
                 if let Some(text) = get_node_text(source_code, &node) {
                     let start_line = node.start_position().row as u32;
+                    
+                    // Skip if outside requested range
+                    if let Some(r) = range {
+                        if start_line < r.start.line || start_line > r.end.line {
+                            // Skip this node and its children if outside range
+                            if cursor.goto_first_child() {
+                                self.collect_function_tokens(source_code, cursor, tokens, range);
+                                cursor.goto_parent();
+                            }
+                            if !cursor.goto_next_sibling() {
+                                break;
+                            }
+                            continue;
+                        }
+                    }
+                    
                     let start_col = node.start_position().column as u32;
                     let end_line = node.end_position().row as u32;
                     let end_col = node.end_position().column as u32;
@@ -133,7 +159,7 @@ impl Ctx {
 
             // Recurse into children
             if cursor.goto_first_child() {
-                self.collect_function_tokens(source_code, cursor, tokens);
+                self.collect_function_tokens(source_code, cursor, tokens, range);
                 cursor.goto_parent();
             }
 
