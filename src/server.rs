@@ -112,11 +112,7 @@ impl RedLanguageServer {
             },
             server_info: Some(ServerInfo {
                 name: "red-lsp".to_string(),
-                version: Some(format!("{} ({})", env!("CARGO_PKG_VERSION"), match position_encoding {
-                    PositionEncoding::Utf8 => "UTF-8",
-                    PositionEncoding::Utf16 => "UTF-16",
-                    PositionEncoding::Utf32 => "UTF-32",
-                })),
+                version: Some(format!("{}", env!("CARGO_PKG_VERSION"))),
             }),
         };
 
@@ -308,14 +304,6 @@ impl RedLanguageServer {
                 if let Some(document) = self.ctx.documents.get(&uri) {
                     let current_tokens = self.ctx.get_semantic_tokens(&document.content, &document.tree);
 
-                    // Check if tokens actually changed
-                    if old.tokens == current_tokens {
-                        // No changes - return empty edits
-                        return Some(SemanticTokensFullDeltaResult::PartialTokensDelta {
-                            edits: vec![],
-                        });
-                    }
-
                     // Compute the minimal edit
                     let edits = compute_semantic_delta(&old.tokens, &current_tokens);
 
@@ -326,9 +314,11 @@ impl RedLanguageServer {
                         result_id: result_id.clone(),
                     });
 
-                    return Some(SemanticTokensFullDeltaResult::PartialTokensDelta {
+                    // Return delta with edits
+                    return Some(SemanticTokensFullDeltaResult::TokensDelta(SemanticTokensDelta {
+                        result_id: Some(result_id),
                         edits,
-                    });
+                    }));
                 }
             }
         }
@@ -499,41 +489,74 @@ fn generate_result_id() -> String {
 
 /// Compute delta between old and new token arrays
 /// Returns edits needed to transform old tokens into new tokens
-/// Uses a two-pointer approach to find the minimal diff range
-fn compute_semantic_delta(old_tokens: &[SemanticToken], new_tokens: &[SemanticToken]) -> Vec<SemanticTokensEdit> {
-    // If tokens are identical, no edits needed
-    if old_tokens == new_tokens {
-        return vec![];
+fn compute_semantic_delta(old: &[SemanticToken], new: &[SemanticToken]) -> Vec<SemanticTokensEdit> {
+    let mut edits = Vec::new();
+    let mut i = 0;
+    let mut j = 0;
+    let field_cnt = 5;
+
+    while i < old.len() && j < new.len() {
+        if old[i] == new[j] {
+            i += 1;
+            j += 1;
+            continue;
+        }
+
+        // Start of a difference
+        let start = i as u32;
+
+        // Find end of difference region
+        let mut i2 = i;
+        let mut j2 = j;
+        while i2 < old.len() && j2 < new.len() && old[i2] != new[j2] {
+            i2 += 1;
+            j2 += 1;
+        }
+
+        // If one side runs out, consume the rest
+        if i2 == old.len() || j2 == new.len() {
+            i2 = old.len();
+            j2 = new.len();
+        }
+
+        let delete_count = (i2 - i) as u32;
+        let data = if j2 == j {
+            None
+        } else {
+            Some(new[j..j2].to_vec())
+        };
+
+        edits.push(SemanticTokensEdit {
+            start: start * field_cnt,
+            delete_count: delete_count * field_cnt,
+            data,
+        });
+
+        i = i2;
+        j = j2;
     }
 
-    let len_old = old_tokens.len();
-    let len_new = new_tokens.len();
-    let max_len = std::cmp::min(len_old, len_new);
-
-    // 1. Find the first index where they differ (from the start)
-    let mut start = 0;
-    while start < max_len && old_tokens[start] == new_tokens[start] {
-        start += 1;
+    // Handle trailing insertions
+    if j < new.len() {
+        edits.push(SemanticTokensEdit {
+            start: i as u32 * field_cnt,
+            delete_count: 0,
+            data: Some(new[j..].to_vec()),
+        });
     }
 
-    // 2. Find the end boundary of the difference (from the end)
-    let mut end_old = len_old;
-    let mut end_new = len_new;
-    while end_old > start && end_new > start && old_tokens[end_old - 1] == new_tokens[end_new - 1] {
-        end_old -= 1;
-        end_new -= 1;
+    // Handle trailing deletions
+    if i < old.len() {
+        edits.push(SemanticTokensEdit {
+            start: i as u32 * field_cnt,
+            delete_count: (old.len() - i) as u32 * field_cnt,
+            data: None,
+        });
     }
 
-    // 3. Construct the edit
-    // start: index in the old array where changes begin
-    // delete_count: how many elements to remove from old array
-    // data: the new elements to insert
-    vec![SemanticTokensEdit {
-        start: start as u32,
-        delete_count: (end_old - start) as u32,
-        data: Some(new_tokens[start..end_new].to_vec()),
-    }]
+    edits
 }
+
 
 fn handle_request(
     server: &mut RedLanguageServer,

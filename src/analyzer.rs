@@ -235,7 +235,7 @@ impl Ctx {
             self.collect_function_tokens(&source_code, &mut cursor, &mut tokens, range);
         }
 
-        encode_semantic_tokens(&tokens)
+        encode_semantic_tokens(tokens)
     }
 
     fn collect_function_tokens(
@@ -379,7 +379,7 @@ impl Symbols {
     }
 }
 
-fn encode_semantic_tokens(tokens: &Vec<(u32, u32, u32, u32, u32)>) -> Vec<SemanticToken> {
+fn encode_semantic_tokens(tokens: Vec<(u32, u32, u32, u32, u32)>) -> Vec<SemanticToken> {
     // LSP semantic tokens use delta encoding:
     // Each token is 5 u32 values: delta_line, delta_start, length, token_type, token_modifiers
     // delta_line = token_line - previous_token_line
@@ -389,13 +389,7 @@ fn encode_semantic_tokens(tokens: &Vec<(u32, u32, u32, u32, u32)>) -> Vec<Semant
     let mut prev_line = 0u32;
     let mut prev_start = 0u32;
 
-    // Sort tokens by line and column
-    let mut sorted_tokens = tokens.clone();
-    sorted_tokens.sort_by(|a, b| {
-        a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1))
-    });
-
-    for (start_line, start_col, length, token_type, token_modifiers) in sorted_tokens {
+    for (start_line, start_col, length, token_type, token_modifiers) in tokens {
         let delta_line = start_line - prev_line;
         let delta_start = if delta_line == 0 {
             start_col - prev_start

@@ -39,9 +39,9 @@ jobs:
             archive_suffix: windows-aarch64.zip
             archive_type: zip
           - os: ubuntu-latest
-            target: aarch64-unknown-linux-musl
-            asset_name: red-lsp-linux-aarch64-musl
-            archive_suffix: linux-aarch64-musl.tar.gz
+            target: aarch64-unknown-linux-gnu
+            asset_name: red-lsp-linux-aarch64-gnu
+            archive_suffix: linux-aarch64.tar.gz
             archive_type: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
@@ -56,9 +56,19 @@ jobs:
           targets: ${{ matrix.target }}
       - name: Install target
         run: rustup target add ${{ matrix.target }}
-      - name: Install musl tools (aarch64)
-        if: matrix.target == 'aarch64-unknown-linux-musl'
-        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
+      - name: Install cross-compiler (aarch64 linux)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+      - name: Setup cross-compiler
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          mkdir -p ~/.cargo
+          cat > ~/.cargo/config.toml << 'EOF'
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
       - name: Prepare archive
