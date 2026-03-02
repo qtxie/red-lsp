@@ -13,12 +13,199 @@ pub struct Document {
     pub tree: Option<Tree>,
 }
 
+/// 路径补全项
+#[derive(Debug, Clone)]
+pub struct PathCompletionItem {
+    pub label: String,
+    pub is_dir: bool,
+    pub full_path: PathBuf,
+}
+
+/// 对象成员类型
+#[derive(Debug, Clone)]
+pub enum MemberType {
+    Value,      // 普通值（数字、字符串等）
+    Function,   // 函数
+    Object,     // 嵌套对象（context）
+}
+
+/// 对象成员
+#[derive(Debug, Clone)]
+pub struct ObjectMember {
+    pub name: String,
+    pub member_type: MemberType,
+}
+
+/// 符号定义位置
+#[derive(Debug, Clone)]
+pub struct SymbolDefinition {
+    pub uri: Uri,
+    pub line: u32,
+    pub character: u32,
+    pub byte_range: (usize, usize),
+}
+
+/// 对象节点，表示一个 context 对象
+#[derive(Debug, Clone)]
+pub struct ObjectNode {
+    pub name: String,                    // 对象名称（如 "a"）
+    pub scope_path: String,              // 完整作用域路径（如 "a/b/a"）
+    pub members: HashMap<String, ObjectMember>,
+    pub byte_range: (usize, usize),      // 对象在源代码中的字节范围
+    pub def_position: Option<SymbolDefinition>,  // 对象定义位置
+}
+
+/// 对象图，存储所有定义的对象及其成员
+#[derive(Debug, Default)]
+pub struct ObjectGraph {
+    /// 作用域路径 -> 对象节点
+    pub objects: HashMap<String, ObjectNode>,
+    /// 对象名称 -> 所有同名对象的作用域路径列表
+    pub name_to_scopes: HashMap<String, Vec<String>>,
+}
+
+impl ObjectGraph {
+    pub fn new() -> Self {
+        Self {
+            objects: HashMap::new(),
+            name_to_scopes: HashMap::new(),
+        }
+    }
+
+    /// 添加对象
+    pub fn add_object(&mut self, name: String, scope_path: String, byte_range: (usize, usize), def_position: Option<SymbolDefinition>) -> &mut ObjectNode {
+        // 记录名称到作用域的映射
+        self.name_to_scopes.entry(name.clone()).or_insert_with(Vec::new).push(scope_path.clone());
+
+        self.objects.entry(scope_path.clone()).or_insert_with(|| ObjectNode {
+            name,
+            scope_path,
+            members: HashMap::new(),
+            byte_range,
+            def_position,
+        })
+    }
+
+    /// 添加成员到对象
+    pub fn add_member(&mut self, scope_path: &str, member: ObjectMember) {
+        if let Some(obj) = self.objects.get_mut(scope_path) {
+            obj.members.insert(member.name.clone(), member);
+        }
+    }
+
+    /// 根据作用域路径获取对象
+    pub fn get_object_by_scope(&self, scope_path: &str) -> Option<&ObjectNode> {
+        self.objects.get(scope_path)
+    }
+
+    /// 根据字节位置查找当前所在的作用域（从内到外）
+    pub fn find_scopes_at_position(&self, byte_pos: usize) -> Vec<&ObjectNode> {
+        let mut scopes: Vec<&ObjectNode> = self.objects.values()
+            .filter(|obj| byte_pos >= obj.byte_range.0 && byte_pos <= obj.byte_range.1)
+            .collect();
+
+        // 按作用域深度排序（深的在前，即内层作用域在前）
+        scopes.sort_by(|a, b| {
+            let depth_a = a.scope_path.matches('/').count();
+            let depth_b = b.scope_path.matches('/').count();
+            depth_b.cmp(&depth_a)
+        });
+
+        scopes
+    }
+
+    /// 解析对象路径并找到对应的对象
+    /// path: "a" 或 "a/b" 等
+    /// current_scope: 当前所在的作用域路径
+    pub fn resolve_object_path(&self, path: &str, current_scope: &str) -> Option<&ObjectNode> {
+        // 将路径分割为部分
+        let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+        if parts.is_empty() {
+            return None;
+        }
+
+        // 从当前作用域开始查找
+        let mut current_path = current_scope.to_string();
+
+        for (i, part) in parts.iter().enumerate() {
+            // 查找在当前路径下名为 part 的对象
+            let found = self.find_child_object(&current_path, part);
+
+            if let Some(obj) = found {
+                if i == parts.len() - 1 {
+                    // 最后一个部分，返回对象
+                    return Some(obj);
+                }
+                current_path = obj.scope_path.clone();
+            } else {
+                return None;
+            }
+        }
+
+        None
+    }
+
+    /// 在指定作用域下查找子对象
+    fn find_child_object(&self, parent_scope: &str, child_name: &str) -> Option<&ObjectNode> {
+        // 获取所有同名对象
+        let scopes = self.name_to_scopes.get(child_name)?;
+
+        // 查找父作用域匹配的对象
+        for scope in scopes {
+            // 检查是否是直接子对象
+            if scope == child_name && parent_scope.is_empty() {
+                // 顶层对象
+                return self.objects.get(scope);
+            }
+
+            // 检查父作用域是否匹配
+            if let Some(parent_end) = scope.rfind('/') {
+                let parent = &scope[..parent_end];
+                if parent == parent_scope {
+                    return self.objects.get(scope);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// 查找对象成员补全
+    pub fn find_members(&self, object_path: &str, current_byte_pos: usize, prefix: &str) -> Vec<ObjectMember> {
+        let mut results = Vec::new();
+
+        // 首先找到当前光标所在的作用域
+        let scopes = self.find_scopes_at_position(current_byte_pos);
+
+        // 尝试从当前作用域解析对象路径
+        for scope in &scopes {
+            if let Some(obj) = self.resolve_object_path(object_path, &scope.scope_path) {
+                for (name, member) in &obj.members {
+                    if prefix.is_empty() || name.starts_with(prefix) {
+                        results.push(member.clone());
+                    }
+                }
+                if !results.is_empty() {
+                    break;
+                }
+            }
+        }
+
+        results
+    }
+}
+
 pub struct Ctx {
     pub parser: tree_sitter::Parser,
-    pub documents: HashMap<Uri, Document>,
+    pub documents: HashMap<Uri, Document>,  // all opened files
     pub symbols: Symbols,
     pub functions: HashSet<CompactString>,
-    pub include_cache: HashSet<PathBuf>,
+    pub include_cache: HashSet<Uri>,
+    pub object_graph: ObjectGraph,  // 对象图
+    /// 符号名称 -> 定义位置列表（支持同名符号）
+    pub symbol_definitions: HashMap<String, Vec<SymbolDefinition>>,
+    /// 对象成员路径 -> 定义位置 (如 "a/b/c" -> c 的定义)
+    pub member_definitions: HashMap<String, SymbolDefinition>,
 }
 
 fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&'a str> {
@@ -43,7 +230,220 @@ impl Ctx {
             symbols: Symbols::new(),
             functions: HashSet::new(),
             include_cache: HashSet::new(),
+            object_graph: ObjectGraph::new(),
+            symbol_definitions: HashMap::new(),
+            member_definitions: HashMap::new(),
         }
+    }
+
+    /// 获取路径补全建议（实时从文件系统读取）
+    pub fn get_path_completions(&self, prefix: &str, file_uri: &Uri) -> Vec<PathCompletionItem> {
+        // 获取文件所在目录
+        let current_dir = Url::parse(file_uri.as_str())
+            .ok()
+            .and_then(|url| url.to_file_path().ok())
+            .and_then(|path| path.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        // 解析前缀，移除 % 前缀并获取基础路径和待补全部分
+        let (base_path, partial) = Self::parse_path_prefix(prefix, &current_dir);
+
+        log::info!("base path {:?}, partial {}", base_path, partial);
+        // 直接从文件系统读取
+        Self::collect_from_filesystem(&base_path, &partial)
+    }
+
+    /// 获取对象成员补全
+    pub fn get_object_completions(&self, object_path: &str, current_byte_pos: usize, prefix: &str) -> Vec<ObjectMember> {
+        self.object_graph.find_members(object_path, current_byte_pos, prefix)
+    }
+
+    /// Go to definition for a symbol or object path
+    /// - `path`: 可以是单个符号名（如 "abc"）或对象路径（如 "a/b/c"）
+    /// - `current_byte_pos`: 当前光标字节位置，用于确定作用域
+    /// - `file_uri`: 当前文件 URI
+    pub fn go_to_definition(&self, path: &str, current_byte_pos: usize, file_uri: &Uri) -> Option<SymbolDefinition> {
+        // 检查是否是对象路径（包含 /）
+        if path.contains('/') {
+            // 对象路径补全，如 "a/b/c"
+            self.resolve_object_member_definition(path, current_byte_pos)
+        } else {
+            // 单个符号名，如 "abc"
+            self.find_symbol_definition(path, current_byte_pos, file_uri)
+        }
+    }
+
+    /// 解析对象成员路径并返回定义位置
+    fn resolve_object_member_definition(&self, object_path: &str, _current_byte_pos: usize) -> Option<SymbolDefinition> {
+        // 首先尝试直接从 member_definitions 查找
+        if let Some(def) = self.member_definitions.get(object_path) {
+            return Some(def.clone());
+        }
+
+        // 尝试从对象图中解析
+        let parts: Vec<&str> = object_path.split('/').filter(|s| !s.is_empty()).collect();
+        if parts.is_empty() {
+            return None;
+        }
+
+        // 从对象图中查找对象
+        // 尝试找到匹配的对象
+        for (scope_path, obj) in &self.object_graph.objects {
+            if scope_path == object_path {
+                return obj.def_position.clone();
+            }
+        }
+
+        None
+    }
+
+    /// 查找符号定义（考虑作用域）
+    fn find_symbol_definition(&self, symbol_name: &str, current_byte_pos: usize, file_uri: &Uri) -> Option<SymbolDefinition> {
+        // 获取所有同名符号的定义
+        let definitions = self.symbol_definitions.get(symbol_name)?;
+
+        if definitions.is_empty() {
+            return None;
+        }
+
+        // 如果只有一个定义，直接返回
+        if definitions.len() == 1 {
+            return Some(definitions[0].clone());
+        }
+
+        // 多个定义时，找到与当前光标位置最接近且在光标之前的定义
+        // 或者根据作用域找到最近的定义
+        let mut best_match: Option<&SymbolDefinition> = None;
+        let mut best_distance: usize = usize::MAX;
+
+        for def in definitions {
+            // 只考虑同一文件的定义
+            if def.uri != *file_uri {
+                continue;
+            }
+
+            let def_byte = def.byte_range.0;
+
+            // 找到在光标之前且距离最近的定义
+            if def_byte <= current_byte_pos {
+                let distance = current_byte_pos - def_byte;
+                if distance < best_distance {
+                    best_distance = distance;
+                    best_match = Some(def);
+                }
+            }
+        }
+
+        // 如果没有在光标之前的定义，返回第一个定义
+        best_match.cloned().or_else(|| definitions.first().cloned())
+    }
+
+    fn parse_path_prefix(prefix: &str, current_dir: &Path) -> (PathBuf, String) {
+        // 移除 % 前缀
+        let prefix = prefix.trim_start_matches('%').trim_matches('"');
+        if prefix.is_empty() {
+            return (current_dir.to_path_buf(), String::new());
+        }
+        if prefix.ends_with("/") {
+            let path = Self::red_path_to_pathbuf(prefix);
+            if path.is_absolute() {
+                return (path, String::new());
+            } else {
+                return (current_dir.join(path), String::new());
+            }
+        }
+
+        // 处理 Red 语言路径格式
+        // %folder/file.red 或 %/C/folder/file.red (Windows)
+        let path = Self::red_path_to_pathbuf(prefix);
+
+        // 分离目录部分和最后一部分的名称
+        let partial = path.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        if path.is_absolute() {
+            let base = path.parent()
+                .unwrap_or(Path::new("/"))
+                .to_path_buf();
+            (base, partial)
+        } else {
+            let base = path.parent().unwrap_or(Path::new(""));
+            (current_dir.join(base), partial)
+        }
+    }
+
+    /// Convert Red language path format to Rust PathBuf
+    /// Red paths start with % and use forward slashes
+    ///
+    /// On Windows:
+    /// - `%/C/folder/file.red` → `C:\folder\file.red` (drive letter)
+    /// - `%folder/file.red` → `folder\file.red` (relative)
+    ///
+    /// On Unix:
+    /// - `%folder/file.red` → `folder/file.red` (relative)
+    /// - `%/home/user/file.red` → `/home/user/file.red` (absolute)
+    fn red_path_to_pathbuf(red_path: &str) -> PathBuf {
+        // Remove leading slashes to normalize
+        let path_str = red_path.trim_start_matches('/');
+
+        // Check if this is a Windows drive letter path
+        #[cfg(windows)]
+        {
+            if path_str.len() >= 1
+                && path_str.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+                && path_str.chars().nth(1) == Some('/')
+            {
+                // Drive letter without colon: C/folder → C:\folder
+                let drive = path_str.chars().next().unwrap_or('C');
+                let rest = &path_str[2..];
+                let mut path = PathBuf::new();
+                path.push(format!("{}:", drive));
+                if !rest.is_empty() {
+                    path.push(rest.replace('/', "\\"));
+                }
+                return path;
+            } else {
+                PathBuf::from(path_str.replace('/', "\\"))
+            }
+        }
+
+        #[cfg(not(windows))]
+        {
+            // On Unix, preserve leading slash for absolute paths
+            if red_path.starts_with('/') {
+                PathBuf::from(red_path)
+            } else {
+                PathBuf::from(path_str)
+            }
+        }
+    }
+
+    fn collect_from_filesystem(base_path: &Path, partial: &str) -> Vec<PathCompletionItem> {
+        let mut results = Vec::new();
+
+        if let Ok(entries) = fs::read_dir(base_path) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+
+                // 跳过隐藏文件
+                if name == "." || name == ".." {
+                    continue;
+                }
+
+                if partial.is_empty() || name.starts_with(partial) {
+                    results.push(PathCompletionItem {
+                        label: name.clone(),
+                        is_dir: path.is_dir(),
+                        full_path: path,
+                    });
+                }
+            }
+        }
+
+        results
     }
 
     /// Parse an include file and cache its content
@@ -57,9 +457,11 @@ impl Ctx {
 
         log::debug!("Attempting to parse include file: {:?}", full_path);
 
-        // Check if already cached
-        if self.include_cache.contains(&full_path) {
-            log::debug!("Include file already cached: {:?}", full_path);
+        let file_url = url::Url::from_file_path(&full_path).ok()?;
+        let uri = serde_json::from_str::<lsp_types::Uri>(&format!("\"{}\"", file_url.as_str())).ok()?;
+
+        // Check if already cached or opened
+        if self.include_cache.contains(&uri) || self.documents.contains_key(&uri) {
             return Some(true);
         }
 
@@ -82,15 +484,9 @@ impl Ctx {
         log::debug!("Successfully parsed include file: {:?}", full_path);
 
         // Create a file URI from the path for collect_identifiers
-        if let Ok(file_uri) = url::Url::from_file_path(&full_path) {
-            if let Ok(uri) = serde_json::from_str::<lsp_types::Uri>(&format!("\"{}\"", file_uri.as_str())) {
-                self.collect_identifiers(&content, &tree, &uri);
-                log::debug!("Collected identifiers from include file: {:?}", full_path);
-            }
-        }
+        self.collect_identifiers(&content, &tree, &uri);
 
-        self.include_cache.insert(full_path.clone());
-        log::info!("Cached include file: {:?}", full_path);
+        self.include_cache.insert(uri);
         Some(true)
     }
 
@@ -158,54 +554,6 @@ impl Ctx {
         None
     }
 
-    /// Convert Red language path format to Rust PathBuf
-    /// Red paths start with % and use forward slashes
-    /// Red paths NEVER contain colons
-    ///
-    /// On Windows:
-    /// - `%/C/folder/file.red` → `C:\folder\file.red` (drive letter)
-    /// - `%folder/file.red` → `folder\file.red` (relative)
-    ///
-    /// On Unix:
-    /// - `%folder/file.red` → `folder/file.red` (relative)
-    /// - `%/home/user/file.red` → `/home/user/file.red` (absolute)
-    fn red_path_to_pathbuf(red_path: &str) -> PathBuf {
-        // Remove leading slashes to normalize
-        let path_str = red_path.trim_start_matches('/');
-
-        // Check if this is a Windows drive letter path
-        // Only on Windows: single letter + '/' means drive letter
-        #[cfg(windows)]
-        {
-            if path_str.len() >= 1
-                && path_str.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
-                && path_str.chars().nth(1) == Some('/')
-            {
-                // Drive letter without colon: C/folder → C:\folder
-                let drive = path_str.chars().next().unwrap_or('C');
-                let rest = &path_str[2..];
-                let mut path = PathBuf::new();
-                path.push(format!("{}:", drive));
-                if !rest.is_empty() {
-                    path.push(rest.replace('/', "\\"));
-                }
-                return path;
-            } else {
-                PathBuf::from(path_str.replace('/', "\\"))
-            }
-        }
-
-        #[cfg(not(windows))]
-        {
-            // On Unix, preserve leading slash for absolute paths
-            if red_path.starts_with('/') {
-                PathBuf::from(red_path)
-            } else {
-                PathBuf::from(path_str)
-            }
-        }
-    }
-
     pub fn collect_identifiers(&mut self, source_code: &str, tree: &Option<Tree>, file_uri: &Uri) {
         if let Some(tree) = tree {
             let mut cursor = tree.walk();
@@ -213,8 +561,269 @@ impl Ctx {
             let base_path = Url::parse(file_uri.as_str())
                 .ok()
                 .and_then(|url| url.to_file_path().ok());
+
+            // 收集符号定义位置
+            self.collect_symbol_definitions(source_code, &mut cursor, file_uri);
+
+            // 重置 cursor 到根节点
+            while cursor.goto_parent() {}
+
             self.walk_tree(source_code, &mut cursor, base_path.as_deref());
+
+            // 重置 cursor 收集对象定义
+            while cursor.goto_parent() {}
+
+            // 收集对象定义
+            self.collect_objects(source_code, &mut cursor, file_uri);
         }
+    }
+
+    /// 遍历语法树收集符号定义位置
+    pub fn collect_symbol_definitions(&mut self, source_code: &str, cursor: &mut tree_sitter::TreeCursor, file_uri: &Uri) {
+        self.walk_symbol_tree(source_code, cursor, file_uri, &Vec::new(), false);
+    }
+
+    /// 遍历树收集符号定义
+    fn walk_symbol_tree(
+        &mut self,
+        source_code: &str,
+        cursor: &mut tree_sitter::TreeCursor,
+        file_uri: &Uri,
+        scope_stack: &[String],
+        skip_function_body: bool,
+    ) {
+        loop {
+            let node = cursor.node();
+            let kind = node.kind();
+
+            // 跳过 function body 内的 set_word
+            // function/does 节点的子节点通常是 [spec block] 或 [block]
+            let current_skip = if kind == "function" || kind == "does" || kind == "func" {
+                true
+            } else {
+                skip_function_body
+            };
+
+            // 收集 set_word 定义（如 obj: 或 a: 1），但跳过 function body 内的
+            if kind == "set_word" && !current_skip {
+                if let Some(name) = get_node_text(source_code, &node) {
+                    let clean_name = name.trim_end_matches(':');
+                    let byte_range = (node.start_byte(), node.end_byte());
+                    let position = self.byte_to_position(source_code, byte_range.0);
+
+                    let def = SymbolDefinition {
+                        uri: file_uri.clone(),
+                        line: position.0 as u32,
+                        character: position.1 as u32,
+                        byte_range,
+                    };
+
+                    // 添加到符号定义索引
+                    self.symbol_definitions.entry(clean_name.to_string())
+                        .or_insert_with(Vec::new).push(def.clone());
+
+                    // 如果有作用域，也添加到成员定义索引
+                    if !scope_stack.is_empty() {
+                        let mut full_path = scope_stack.join("/");
+                        full_path.push('/');
+                        full_path.push_str(clean_name);
+                        self.member_definitions.insert(full_path, def);
+                    }
+                }
+            }
+
+            // 递归进入子节点
+            if cursor.goto_first_child() {
+                // 对于 assignment 节点，需要将对象名加入作用域栈
+                let new_scope_stack = if kind == "assignment" {
+                    if let Some(child) = node.child(0) {
+                        if child.kind() == "set_word" {
+                            if let Some(name) = get_node_text(source_code, &child) {
+                                let mut new_stack = scope_stack.to_vec();
+                                new_stack.push(name.trim_end_matches(':').to_string());
+                                new_stack
+                            } else {
+                                scope_stack.to_vec()
+                            }
+                        } else {
+                            scope_stack.to_vec()
+                        }
+                    } else {
+                        scope_stack.to_vec()
+                    }
+                } else {
+                    scope_stack.to_vec()
+                };
+
+                self.walk_symbol_tree(source_code, cursor, file_uri, &new_scope_stack, current_skip);
+                cursor.goto_parent();
+            }
+
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+
+    /// 将字节偏移量转换为 (line, column) 位置
+    fn byte_to_position(&self, source_code: &str, byte_offset: usize) -> (usize, usize) {
+        let before = &source_code[..byte_offset.min(source_code.len())];
+        let line = before.matches('\n').count();
+        let last_newline = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let column = byte_offset - last_newline;
+        (line, column)
+    }
+
+    /// 遍历语法树收集对象（context）定义
+    pub fn collect_objects(&mut self, source_code: &str, cursor: &mut tree_sitter::TreeCursor, file_uri: &Uri) {
+        // 重置 cursor 到根节点
+        while cursor.goto_parent() {}
+
+        self.walk_object_tree(source_code, cursor, &Vec::new(), file_uri);
+    }
+
+    /// 遍历树收集对象和成员
+    /// scope_stack: 当前作用域栈，从外到内
+    fn walk_object_tree(
+        &mut self,
+        source_code: &str,
+        cursor: &mut tree_sitter::TreeCursor,
+        scope_stack: &[String],
+        file_uri: &Uri,
+    ) {
+        loop {
+            let node = cursor.node();
+            let kind = node.kind();
+
+            // 检测对象定义：obj: context [...] 或 obj: make object! [...]
+            if kind == "assignment" {
+                // 尝试获取对象名称和成员
+                if let Some((obj_name, members, byte_range)) = self.parse_object_with_range(source_code, node) {
+                    // 构建完整作用域路径
+                    let mut scope_path = scope_stack.join("/");
+                    if !scope_path.is_empty() {
+                        scope_path.push('/');
+                    }
+                    scope_path.push_str(&obj_name);
+
+                    // 计算对象定义位置
+                    let def_position = {
+                        let pos = self.byte_to_position(source_code, byte_range.0);
+                        Some(SymbolDefinition {
+                            uri: file_uri.clone(),
+                            line: pos.0 as u32,
+                            character: pos.1 as u32,
+                            byte_range,
+                        })
+                    };
+
+                    // 添加对象到图
+                    self.object_graph.add_object(obj_name.clone(), scope_path.clone(), byte_range, def_position);
+
+                    // 添加成员
+                    for member in members {
+                        self.object_graph.add_member(&scope_path, member);
+                    }
+                }
+            }
+
+            // 递归进入子节点
+            if cursor.goto_first_child() {
+                // 检查是否是新的对象定义（assignment 节点）
+                let child_kind = cursor.node().kind();
+
+                // 对于 assignment 节点，需要将对象名加入作用域栈
+                let new_scope_stack = if child_kind == "assignment" {
+                    if let Some((obj_name, _, _)) = self.parse_object_with_range(source_code, cursor.node()) {
+                        let mut new_stack = scope_stack.to_vec();
+                        new_stack.push(obj_name);
+                        new_stack
+                    } else {
+                        scope_stack.to_vec()
+                    }
+                } else {
+                    scope_stack.to_vec()
+                };
+
+                self.walk_object_tree(source_code, cursor, &new_scope_stack, file_uri);
+                cursor.goto_parent();
+            }
+
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+
+    /// 解析对象定义，返回对象名称、成员列表和字节范围
+    fn parse_object_with_range(
+        &self,
+        source_code: &str,
+        node: tree_sitter::Node,
+    ) -> Option<(String, Vec<ObjectMember>, (usize, usize))> {
+        let mut obj_name = None;
+        let mut members = Vec::new();
+        let byte_range = (node.start_byte(), node.end_byte());
+
+        // 遍历子节点查找对象名称和成员
+        let mut child_cursor = node.walk();
+
+        for child in node.children(&mut child_cursor) {
+            let child_kind = child.kind();
+
+            // 对象名称通常是 set_word (如 obj:)
+            if child_kind == "set_word" {
+                if let Some(name) = get_node_text(source_code, &child) {
+                    obj_name = Some(name.trim_end_matches(':').to_string());
+                }
+            }
+
+            // 查找 context 或 object 关键字后的 block 作为成员
+            if child_kind == "block" || child_kind == "body" {
+                // 解析 block 中的成员
+                members = self.parse_object_members(source_code, child);
+            }
+        }
+
+        obj_name.map(|name| (name, members, byte_range))
+    }
+
+    /// 解析对象成员
+    fn parse_object_members(&self, source_code: &str, block_node: tree_sitter::Node) -> Vec<ObjectMember> {
+        let mut members = Vec::new();
+        let mut child_cursor = block_node.walk();
+
+        for child in block_node.children(&mut child_cursor) {
+            let child_kind = child.kind();
+
+            // 成员定义通常是 set_word (如 a: 1)
+            if child_kind == "set_word" {
+                if let Some(name) = get_node_text(source_code, &child) {
+                    let member_name = name.trim_end_matches(':').to_string();
+
+                    // 判断成员类型
+                    let member_type = if let Some(next_sibling) = child.next_sibling() {
+                        let next_kind = next_sibling.kind();
+                        if next_kind == "function" || next_kind == "func" || next_kind == "does" {
+                            MemberType::Function
+                        } else if next_kind == "object" || next_kind == "context" {
+                            MemberType::Object
+                        } else {
+                            MemberType::Value
+                        }
+                    } else {
+                        MemberType::Value
+                    };
+
+                    members.push(ObjectMember {
+                        name: member_name,
+                        member_type,
+                    });
+                }
+            }
+        }
+
+        members
     }
 
     pub fn get_semantic_tokens(&self, content: &Rope, tree: &Option<Tree>) -> Vec<SemanticToken> {
@@ -410,4 +1019,21 @@ fn encode_semantic_tokens(tokens: Vec<(u32, u32, u32, u32, u32)>) -> Vec<Semanti
     }
 
     result
+}
+
+fn parent_ends_with_dot_dot(path: &Path) -> bool {
+    // Get the parent path as an Option<&Path>
+    if let Some(parent) = path.parent() {
+        // Get the last component of the parent path
+        if let Some(last_component) = parent.components().last() {
+            // Check if the last component is Component::ParentDir, which corresponds to ".."
+            matches!(last_component, std::path::Component::ParentDir)
+        } else {
+            // Parent has no components (e.g., path was already a root or empty)
+            false
+        }
+    } else {
+        // Path has no parent
+        false
+    }
 }

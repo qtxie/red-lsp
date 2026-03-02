@@ -60,6 +60,12 @@ impl RedLanguageServer {
             client_capabilities.general.as_ref().and_then(|g| g.position_encodings.as_ref())
         );
 
+        let chosen_encoding = match position_encoding {
+            PositionEncoding::Utf8  => PositionEncodingKind::UTF8,
+            PositionEncoding::Utf16 => PositionEncodingKind::UTF16,
+            PositionEncoding::Utf32 => PositionEncodingKind::UTF32,
+        };
+
         // Check if client supports semantic tokens delta
         let client_supports_delta = client_capabilities
             .text_document
@@ -98,6 +104,7 @@ impl RedLanguageServer {
 
         let result = InitializeResult {
             capabilities: ServerCapabilities {
+                position_encoding: Some(chosen_encoding),
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
                         open_close: Some(true),
@@ -129,14 +136,9 @@ impl RedLanguageServer {
     ) -> PositionEncoding {
         // Server preference order: UTF-8 > UTF-16 > UTF-32
         if let Some(encodings) = client_encodings {
-            for encoding in encodings {
-                match encoding.as_str() {
-                    "utf-8" => return PositionEncoding::Utf8,
-                    "utf-16" => return PositionEncoding::Utf16,
-                    "utf-32" => return PositionEncoding::Utf32,
-                    _ => {}
-                }
-            }
+            if encodings.contains(&PositionEncodingKind::UTF8) {return PositionEncoding::Utf8;}
+            if encodings.contains(&PositionEncodingKind::UTF16) {return PositionEncoding::Utf16;}
+            if encodings.contains(&PositionEncodingKind::UTF32) {return PositionEncoding::Utf32;}
         }
 
         // Default to UTF-16 if no encoding specified
@@ -235,21 +237,171 @@ impl RedLanguageServer {
 
     fn handle_goto_definition(
         &self,
-        _params: GotoDefinitionParams,
+        params: GotoDefinitionParams,
     ) -> Option<GotoDefinitionResponse> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        // 获取光标所在行的内容
+        let line_content = self.get_line_at_position(uri, position);
+        let cursor_col = position.character as usize;
+        let byte_pos = self.get_byte_offset(uri, position);
+
+        // 提取要跳转的符号或路径
+        let symbol_path = if let Some(path) = self.extract_object_path(&line_content, cursor_col) {
+            // 对象路径，如 "a/b/c"
+            path.0
+        } else {
+            // 单个符号名
+            self.get_word_at_position(uri, position)
+        };
+
+        // 查找定义
+        if let Some(def) = self.ctx.go_to_definition(&symbol_path, byte_pos, uri) {
+            let range = lsp_types::Range {
+                start: lsp_types::Position {
+                    line: def.line,
+                    character: def.character,
+                },
+                end: lsp_types::Position {
+                    line: def.line,
+                    character: def.character,
+                },
+            };
+
+            return Some(GotoDefinitionResponse::Scalar(lsp_types::Location {
+                uri: def.uri,
+                range,
+            }));
+        }
+
         None
     }
 
     fn handle_completion(&self, params: CompletionParams) -> Option<lsp_types::CompletionResponse> {
-        // Get the prefix from the text document position
-        let prefix = self.get_word_at_position(
-            &params.text_document_position.text_document.uri,
-            params.text_document_position.position,
-        );
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
 
+        // 获取光标所在行的内容，判断是否是路径补全
+        let line_content = self.get_line_at_position(uri, position);
+        let cursor_col = position.character as usize;
+
+        // 检查是否是 Red 语言文件路径补全（以 % 开头）
+        if let Some(path_prefix) = self.extract_path_prefix(&line_content, cursor_col) {
+            // 文件路径补全
+            let completions = self.ctx.get_path_completions(&path_prefix, uri);
+            let items = get_path_completion_items(&completions);
+            return Some(lsp_types::CompletionResponse::Array(items));
+        }
+
+        // 检查是否是对象成员补全（包含 / 但不以 % 开头）
+        if let Some((object_path, member_prefix)) = self.extract_object_path(&line_content, cursor_col) {
+            // 对象成员补全 - 需要计算光标的字节位置
+            let byte_pos = self.get_byte_offset(uri, position);
+            let members = self.ctx.get_object_completions(&object_path, byte_pos, &member_prefix);
+            let items = get_object_completion_items(&members);
+            return Some(lsp_types::CompletionResponse::Array(items));
+        }
+
+        // 普通符号补全
+        let prefix = self.get_word_at_position(uri, position);
+        if prefix.is_empty() {
+            return Some(lsp_types::CompletionResponse::Array(vec![]));
+        }
         let symbols = self.ctx.symbols.find_by_prefix(&prefix);
         let items = get_red_completions(&symbols);
         Some(lsp_types::CompletionResponse::Array(items))
+    }
+
+    /// 获取指定行的内容
+    fn get_line_at_position(&self, uri: &lsp_types::Uri, position: lsp_types::Position) -> String {
+        if let Some(document) = self.ctx.documents.get(uri) {
+            let line_num = position.line as usize;
+            if line_num < document.content.len_lines() {
+                let line_start = document.content.line_to_char(line_num);
+                let line_end = document.content.line_to_char(line_num + 1);
+                return document.content.chars_at(line_start).take(line_end - line_start).collect();
+            }
+        }
+        String::new()
+    }
+
+    /// 获取光标位置的字节偏移量
+    fn get_byte_offset(&self, uri: &lsp_types::Uri, position: lsp_types::Position) -> usize {
+        if let Some(document) = self.ctx.documents.get(uri) {
+            let line_num = position.line as usize;
+            let char_num = position.character as usize;
+            let char_offset = document.content.line_to_char(line_num) + char_num;
+            return document.content.char_to_byte(char_offset);
+        }
+        0
+    }
+
+    /// 从行内容中提取 Red 语言路径前缀（以 % 开头）
+    /// 返回光标位置之前的路径前缀（包含 %）
+    fn extract_path_prefix(&self, line_content: &str, cursor_col: usize) -> Option<String> {
+        if cursor_col == 0 || cursor_col > line_content.len() {
+            return None;
+        }
+
+        // 获取光标之前的内容
+        let before_cursor = &line_content[..cursor_col];
+
+        // 查找最后一个空白字符，确定当前 token 的起始位置
+        let token_start = before_cursor
+            .char_indices()
+            .rfind(|(_, c)| c.is_whitespace())
+            .map(|(idx, _)| idx + 1)
+            .unwrap_or(0);
+
+        let token = &before_cursor[token_start..];
+
+        // 检查 token 是否以 % 开头（Red 语言路径格式）
+        if token.starts_with('%') {
+            Some(token.to_string())
+        } else {
+            None
+        }
+    }
+
+    /// 从行内容中提取对象路径（如 obj1/ 或 obj1/d/）
+    /// 返回 (对象路径，成员前缀)
+    fn extract_object_path(&self, line_content: &str, cursor_col: usize) -> Option<(String, String)> {
+        if cursor_col == 0 || cursor_col > line_content.len() {
+            return None;
+        }
+
+        // 获取光标之前的内容
+        let before_cursor = &line_content[..cursor_col];
+
+        // 查找最后一个空白字符，确定当前 token 的起始位置
+        let token_start = before_cursor
+            .char_indices()
+            .rfind(|(_, c)| c.is_whitespace())
+            .map(|(idx, _)| idx + 1)
+            .unwrap_or(0);
+
+        let token = &before_cursor[token_start..];
+
+        // 检查 token 是否包含 / 但不以 % 开头（对象成员访问）
+        if token.contains('/') && !token.starts_with('%') {
+            // 分割对象路径和成员前缀
+            // 例如：obj1/a  -> 对象路径："obj1", 成员前缀："a"
+            //       obj1/   -> 对象路径："obj1", 成员前缀：""
+            //       obj1/d/ -> 对象路径："obj1/d", 成员前缀：""
+
+            // 找到最后一个 / 的位置
+            if let Some(last_slash) = token.rfind('/') {
+                let object_path = &token[..last_slash];
+                let member_prefix = &token[last_slash + 1..];
+
+                if !object_path.is_empty() {
+                    return Some((object_path.to_string(), member_prefix.to_string()));
+                }
+            }
+        }
+
+        None
     }
 
     fn handle_text_document_did_close(&mut self, params: DidCloseTextDocumentParams) {
@@ -387,25 +539,37 @@ impl RedLanguageServer {
                 let line_start = document.content.line_to_char(line_num);
                 let line_end = document.content.line_to_char(line_num + 1);
                 let line_content: String = document.content.chars_at(line_start).take(line_end - line_start).collect();
+                if line_content.is_empty() {return line_content};
 
                 // Get the word at the cursor position
                 let chars: Vec<char> = line_content.chars().collect();
-                if char_num <= chars.len() {
+                let end_num = chars.len();
+                if char_num <= end_num {
                     // Find word start
                     let mut start = char_num;
-                    while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1].is_ascii_punctuation() ) {
+                    while start > 0 && is_word_char(chars[start - 1]) {
                         start -= 1;
                     }
 
-                    // Return the prefix
-                    if start < char_num {
-                        return chars[start..char_num].iter().collect();
+                    // Find word end
+                    let mut end = char_num;
+                    while end < end_num && is_word_char(chars[end]) {
+                        end += 1;
+                    }
+
+                    // Return the word
+                    if start < char_num || end > char_num {
+                        return chars[start..end].iter().collect();
                     }
                 }
             }
         }
         String::new()
     }
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_' || c == '?' || c == '!' || c == '&'|| c == '*' || c == '~' || c == '|' || c == '^'
 }
 
 fn get_red_completions(symbols: &Vec<String>) -> Vec<lsp_types::CompletionItem> {
@@ -415,6 +579,53 @@ fn get_red_completions(symbols: &Vec<String>) -> Vec<lsp_types::CompletionItem> 
             label: word.to_string(),
             kind: Some(lsp_types::CompletionItemKind::FUNCTION),
             ..Default::default()
+        })
+        .collect()
+}
+
+/// 将路径补全项转换为 LSP 补全项
+fn get_path_completion_items(completions: &Vec<analyzer::PathCompletionItem>) -> Vec<lsp_types::CompletionItem> {
+    completions
+        .iter()
+        .map(|comp| {
+            let kind = if comp.is_dir {
+                lsp_types::CompletionItemKind::FOLDER
+            } else {
+                lsp_types::CompletionItemKind::FILE
+            };
+
+            // 为目录添加尾随斜杠
+            let label = if comp.is_dir {
+                format!("{}/", comp.label)
+            } else {
+                comp.label.clone()
+            };
+
+            lsp_types::CompletionItem {
+                label: label.clone(),
+                kind: Some(kind),
+                ..Default::default()
+            }
+        })
+        .collect()
+}
+
+/// 将对象成员转换为 LSP 补全项
+fn get_object_completion_items(members: &Vec<analyzer::ObjectMember>) -> Vec<lsp_types::CompletionItem> {
+    members
+        .iter()
+        .map(|member| {
+            let kind = match member.member_type {
+                analyzer::MemberType::Function => lsp_types::CompletionItemKind::FUNCTION,
+                analyzer::MemberType::Object => lsp_types::CompletionItemKind::MODULE,
+                analyzer::MemberType::Value => lsp_types::CompletionItemKind::VARIABLE,
+            };
+
+            lsp_types::CompletionItem {
+                label: member.name.clone(),
+                kind: Some(kind),
+                ..Default::default()
+            }
         })
         .collect()
 }
