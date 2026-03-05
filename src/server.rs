@@ -570,9 +570,23 @@ impl RedLanguageServer {
     }
 }
 
+/// 快速判断 ASCII 字符是否为单词字符（使用查找表）
+const fn is_ascii_word_char(c: u8) -> bool {
+    matches!(c,
+        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
+        b'-' | b'?' | b'!' | b'_' | b'&' | b'*' | b'~' | b'|' | b'^' | b'+'
+    )
+}
+
+#[inline]
 fn is_word_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '-' || c == '?' || c == '!' || c == '_' ||
-    c == '&' || c == '*' || c == '~' || c == '|' || c == '^' || c == '+'
+    // ASCII 路径使用快速查找表
+    if c.is_ascii() {
+        is_ascii_word_char(c as u8)
+    } else {
+        // 非 ASCII 字符（Unicode）使用 is_alphanumeric
+        c.is_alphanumeric()
+    }
 }
 
 fn get_red_completions(symbols: &Vec<String>) -> Vec<lsp_types::CompletionItem> {

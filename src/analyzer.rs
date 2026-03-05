@@ -199,6 +199,8 @@ pub struct Ctx {
     pub symbol_definitions: HashMap<String, Vec<SymbolDefinition>>,
     /// 对象成员路径 -> 定义位置 (如 "a/b/c" -> c 的定义)
     pub member_definitions: HashMap<String, SymbolDefinition>,
+    /// 节点类型 ID 缓存，避免重复字符串比较
+    pub node_kind_ids: HashMap<&'static str, u16>,
 }
 
 impl Ctx {
@@ -206,6 +208,14 @@ impl Ctx {
         let mut parser = tree_sitter::Parser::new();
         let lang = tree_sitter_red::LANGUAGE;
         parser.set_language(&lang.into()).expect("Failed to set language");
+
+        // 预获取所有节点类型的 kind_id
+        let mut node_kind_ids = HashMap::new();
+        let lang: tree_sitter::Language = lang.into();
+        for kind_name in ["issue", "file", "word", "set_word", "function", "does", "context", "block", "path", "set_path"] {
+            node_kind_ids.insert(kind_name, lang.id_for_node_kind(kind_name, true));
+        }
+
         Self {
             parser,
             documents: HashMap::new(),
@@ -215,7 +225,14 @@ impl Ctx {
             object_graph: ObjectGraph::new(),
             symbol_definitions: HashMap::new(),
             member_definitions: HashMap::new(),
+            node_kind_ids,
         }
+    }
+
+    /// 快速获取节点类型 ID
+    #[inline]
+    fn get_kind_id(&self, kind_name: &str) -> u16 {
+        *self.node_kind_ids.get(kind_name).unwrap_or(&0)
     }
 }
 
@@ -510,39 +527,46 @@ impl Ctx {
 
     // Recursive function to collect identifiers from the tree
     pub fn walk_tree(&mut self, source_code: &str, cursor: &mut TreeCursor, base_path: Option<&Path>) {
+        // 预获取节点类型 ID
+        let kind_issue = self.get_kind_id("issue");
+        let kind_file = self.get_kind_id("file");
+        let kind_word = self.get_kind_id("word");
+        let kind_set_word = self.get_kind_id("set_word");
+        let kind_function = self.get_kind_id("function");
+        let kind_does = self.get_kind_id("does");
+
         loop {
             let node = cursor.node();
-            let kind = node.kind();
+            let kind_id = node.kind_id();
 
-            // Check for include/import directives (tree-sitter-red may use different node types)
-            if kind == "issue" && get_node_text(source_code, &node).unwrap_or("") == "#include" {
+            // Check for include/import directives
+            if kind_id == kind_issue && get_node_text(source_code, &node).unwrap_or("") == "#include" {
                 if let Some(filepath) = node.next_sibling() {
-                    if filepath.kind() == "file" && let Some(include_path) = Self::extract_include_path(source_code, &filepath) {
-                        log::debug!("include path: {:?}", include_path);
-                        if let Some(base_dir) = base_path.and_then(|p| p.parent()) {
-                            self.parse_include_file(&include_path, base_dir);
+                    if filepath.kind_id() == kind_file {
+                        if let Some(include_path) = Self::extract_include_path(source_code, &filepath) {
+                            log::debug!("include path: {:?}", include_path);
+                            if let Some(base_dir) = base_path.and_then(|p| p.parent()) {
+                                self.parse_include_file(&include_path, base_dir);
+                            }
                         }
                     }
                 }
             }
 
             // Check if this node is an identifier or function name
-            if kind == "word" || kind == "set_word" {
+            if kind_id == kind_word || kind_id == kind_set_word {
                 let mut text = get_node_text(source_code, &node).unwrap_or("");
-                if kind == "set_word" {
+                if kind_id == kind_set_word {
                     text = text.trim_end_matches(':');
                 }
                 self.symbols.insert(text);
             }
 
-            // Highlight function definitions (set_word followed by function body)
-            // In Red: func-name: func [...] [...]
-            if kind == "function" || kind == "does" {
-                // Find the function name
+            // Highlight function definitions
+            if kind_id == kind_function || kind_id == kind_does {
                 if let Some(name_node) = node.child(0) {
-                    if name_node.kind() == "set_word" {
+                    if name_node.kind_id() == kind_set_word {
                         if let Some(text) = get_node_text(source_code, &name_node) {
-                            // Remove the trailing colon for set_word
                             let name = text.trim_end_matches(':');
                             self.functions.insert(CompactString::from(name));
                         }
@@ -623,18 +647,24 @@ impl Ctx {
         scope_stack: &mut Vec<String>,
         scope: &mut ObjectNode
     ) {
+        // 预获取节点类型 ID
+        let kind_set_word = self.get_kind_id("set_word");
+        let kind_function = self.get_kind_id("function");
+        let kind_does = self.get_kind_id("does");
+        let kind_context = self.get_kind_id("context");
+
         loop {
             let node = cursor.node();
-            let kind = node.kind();
+            let kind_id = node.kind_id();
             let mut member_type = MemberType::Value;
             let mut member_name = String::new();
 
-            if kind == "set_word" {
+            if kind_id == kind_set_word {
                 let name = get_node_text(source_code, &node).unwrap();
                 member_name = name.trim_end_matches(':').to_string();
             }
 
-            if kind == "function" || kind == "does" {
+            if kind_id == kind_function || kind_id == kind_does {
                 let name_node = node.child_by_field_name("name").unwrap();
                 let name = get_node_text(source_code, &name_node).unwrap();
                 member_name = name.trim_end_matches(':').to_string();
@@ -642,7 +672,7 @@ impl Ctx {
             }
 
             // 检测对象定义：obj: context [...] 或 obj: make object! [...]
-            if kind == "context" {
+            if kind_id == kind_context {
                 let mut obj = ObjectNode::new();
                 obj.byte_range = (node.start_byte(), node.end_byte());
                 obj.file_path = uri.to_string();
@@ -696,7 +726,8 @@ impl Ctx {
         if let Some(tree) = tree {
             let source_code = content.to_string();
             let mut cursor = tree.walk();
-            self.collect_function_tokens(&source_code, &mut cursor, &mut tokens, range);
+            let kind_word = self.get_kind_id("word");
+            self.collect_function_tokens(&source_code, &mut cursor, &mut tokens, range, kind_word);
         }
 
         encode_semantic_tokens(tokens)
@@ -708,13 +739,14 @@ impl Ctx {
         cursor: &mut TreeCursor,
         tokens: &mut Vec<(u32, u32, u32, u32, u32)>,
         range: Option<lsp_types::Range>,
+        kind_word: u16,
     ) {
         loop {
             let node = cursor.node();
-            let kind = node.kind();
+            let kind_id = node.kind_id();
 
             // Also highlight word nodes as references
-            if kind == "word" {
+            if kind_id == kind_word {
                 if let Some(text) = get_node_text(source_code, &node) {
                     let start_line = node.start_position().row as u32;
 
@@ -723,7 +755,7 @@ impl Ctx {
                         if start_line < r.start.line || start_line > r.end.line {
                             // Skip this node and its children if outside range
                             if cursor.goto_first_child() {
-                                self.collect_function_tokens(source_code, cursor, tokens, range);
+                                self.collect_function_tokens(source_code, cursor, tokens, range, kind_word);
                                 cursor.goto_parent();
                             }
                             if !cursor.goto_next_sibling() {
@@ -755,7 +787,7 @@ impl Ctx {
 
             // Recurse into children
             if cursor.goto_first_child() {
-                self.collect_function_tokens(source_code, cursor, tokens, range);
+                self.collect_function_tokens(source_code, cursor, tokens, range, kind_word);
                 cursor.goto_parent();
             }
 
