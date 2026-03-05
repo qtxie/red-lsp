@@ -6,8 +6,28 @@ use compact_str::CompactString;
 use fast_radix_trie::StringRadixMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
 use url::Url;
+
+/// 全局字符串池，存储所有符号名称
+pub static STRING_POOL: Lazy<Mutex<HashSet<CompactString>>> = 
+    Lazy::new(|| Mutex::new(HashSet::new()));
+
+/// 从字符串池获取或插入符号名称，返回 'static 引用
+pub fn get_or_insert_symbol(name: &str) -> &'static CompactString {
+    let mut pool = STRING_POOL.lock().unwrap();
+    // 检查是否已存在
+    if let Some(existing) = pool.get(name) {
+        // 安全：只要 STRING_POOL 存在，引用就有效
+        return unsafe { std::mem::transmute::<&CompactString, &'static CompactString>(existing) };
+    }
+    // 插入新的
+    let cs = CompactString::from(name);
+    pool.insert(cs);
+    // 安全：刚插入的元素在 STRING_POOL 的整个生命周期内都有效
+    unsafe { std::mem::transmute::<&CompactString, &'static CompactString>(pool.get(name).unwrap()) }
+}
 
 pub struct Document {
     pub content: Rope,
@@ -29,10 +49,10 @@ pub enum MemberType {
     Object,     // 嵌套对象（context）
 }
 
-/// 对象成员 - 使用 Rc 共享字符串池中的名称
+/// 对象成员 - 使用 'static 引用共享字符串池中的名称
 #[derive(Debug, Clone)]
 pub struct ObjectMember {
-    pub name: Rc<CompactString>,
+    pub name: &'static CompactString,
     pub member_type: MemberType,
 }
 
@@ -192,8 +212,6 @@ impl ObjectGraph {
 pub struct Ctx {
     pub parser: tree_sitter::Parser,
     pub documents: HashMap<Uri, Document>,  // all opened files
-    /// 字符串池：使用 HashSet 存储所有符号名称，通过 Rc 共享
-    pub symbol_names: HashSet<Rc<CompactString>>,
     pub symbols: Symbols,
     pub functions: HashSet<CompactString>,
     pub include_cache: HashSet<Uri>,
@@ -205,17 +223,9 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    /// 获取或插入符号名称到字符串池，返回 Rc 引用
-    pub fn get_or_insert_symbol(&mut self, name: &str) -> Rc<CompactString> {
-        let cs = CompactString::from(name);
-        // 检查是否已存在
-        if let Some(existing) = self.symbol_names.get(&cs) {
-            return Rc::clone(existing);
-        }
-        // 插入新的
-        let rc = Rc::new(cs);
-        self.symbol_names.insert(Rc::clone(&rc));
-        rc
+    /// 获取或插入符号名称到全局字符串池
+    pub fn get_or_insert_symbol(name: &str) -> &'static CompactString {
+        get_or_insert_symbol(name)
     }
 
     pub fn new() -> Self {
@@ -226,7 +236,6 @@ impl Ctx {
             parser,
             documents: HashMap::new(),
             symbols: Symbols::new(),
-            symbol_names: HashSet::new(),
             functions: HashSet::new(),
             include_cache: HashSet::new(),
             object_graph: ObjectGraph::new(),
@@ -746,7 +755,7 @@ impl Ctx {
             }
 
             if !member_name.is_empty() {
-                let name = self.get_or_insert_symbol(&member_name);
+                let name = Ctx::get_or_insert_symbol(&member_name);
                 scope.members.insert(
                     member_name,
                     ObjectMember {name, member_type}
