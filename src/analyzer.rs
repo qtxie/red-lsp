@@ -1,11 +1,12 @@
 use hashbrown::{HashMap, HashSet};
 use lsp_types::{SemanticToken, Uri};
 use ropey::Rope;
-use tree_sitter::Tree;
+use tree_sitter::{Tree, TreeCursor};
 use compact_str::CompactString;
 use fast_radix_trie::StringRadixMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use url::Url;
 
 pub struct Document {
@@ -18,7 +19,6 @@ pub struct Document {
 pub struct PathCompletionItem {
     pub label: String,
     pub is_dir: bool,
-    pub full_path: PathBuf,
 }
 
 /// 对象成员类型
@@ -29,10 +29,10 @@ pub enum MemberType {
     Object,     // 嵌套对象（context）
 }
 
-/// 对象成员
+/// 对象成员 - 使用 Rc 共享字符串池中的名称
 #[derive(Debug, Clone)]
 pub struct ObjectMember {
-    pub name: String,
+    pub name: Rc<CompactString>,
     pub member_type: MemberType,
 }
 
@@ -40,19 +40,28 @@ pub struct ObjectMember {
 #[derive(Debug, Clone)]
 pub struct SymbolDefinition {
     pub uri: Uri,
-    pub line: u32,
-    pub character: u32,
     pub byte_range: (usize, usize),
 }
 
 /// 对象节点，表示一个 context 对象
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ObjectNode {
     pub name: String,                    // 对象名称（如 "a"）
     pub scope_path: String,              // 完整作用域路径（如 "a/b/a"）
-    pub members: HashMap<String, ObjectMember>,
+    pub members: StringRadixMap<ObjectMember>,
     pub byte_range: (usize, usize),      // 对象在源代码中的字节范围
-    pub def_position: Option<SymbolDefinition>,  // 对象定义位置
+    pub file_path: String,
+}
+
+impl ObjectNode {
+    pub fn new() -> Self {
+        Self {
+            name: String::new(),
+            scope_path: String::new(),
+            members: StringRadixMap::new(),
+            ..Default::default()
+        }
+    }
 }
 
 /// 对象图，存储所有定义的对象及其成员
@@ -73,29 +82,11 @@ impl ObjectGraph {
     }
 
     /// 添加对象
-    pub fn add_object(&mut self, name: String, scope_path: String, byte_range: (usize, usize), def_position: Option<SymbolDefinition>) -> &mut ObjectNode {
+    pub fn add_object(&mut self, name: String, scope_path: String, obj: ObjectNode) -> &mut ObjectNode {
         // 记录名称到作用域的映射
         self.name_to_scopes.entry(name.clone()).or_insert_with(Vec::new).push(scope_path.clone());
 
-        self.objects.entry(scope_path.clone()).or_insert_with(|| ObjectNode {
-            name,
-            scope_path,
-            members: HashMap::new(),
-            byte_range,
-            def_position,
-        })
-    }
-
-    /// 添加成员到对象
-    pub fn add_member(&mut self, scope_path: &str, member: ObjectMember) {
-        if let Some(obj) = self.objects.get_mut(scope_path) {
-            obj.members.insert(member.name.clone(), member);
-        }
-    }
-
-    /// 根据作用域路径获取对象
-    pub fn get_object_by_scope(&self, scope_path: &str) -> Option<&ObjectNode> {
-        self.objects.get(scope_path)
+        self.objects.entry(scope_path.clone()).or_insert(obj)
     }
 
     /// 根据字节位置查找当前所在的作用域（从内到外）
@@ -171,33 +162,38 @@ impl ObjectGraph {
     }
 
     /// 查找对象成员补全
-    pub fn find_members(&self, object_path: &str, current_byte_pos: usize, prefix: &str) -> Vec<ObjectMember> {
-        let mut results = Vec::new();
-
+    pub fn find_members(&self, object_path: &str, current_byte_pos: usize, prefix: &str) -> Vec<&ObjectMember> {
         // 首先找到当前光标所在的作用域
         let scopes = self.find_scopes_at_position(current_byte_pos);
 
         // 尝试从当前作用域解析对象路径
         for scope in &scopes {
             if let Some(obj) = self.resolve_object_path(object_path, &scope.scope_path) {
-                for (name, member) in &obj.members {
-                    if prefix.is_empty() || name.starts_with(prefix) {
-                        results.push(member.clone());
-                    }
-                }
+                //for (name, member) in &obj.members {
+                //    if prefix.is_empty() || name.starts_with(prefix) {
+                //        results.push(member.clone());
+                //    }
+                //}
+                let results : Vec<&ObjectMember> = if prefix.is_empty() {
+                    obj.members.values().collect()
+                } else {
+                    obj.members.common_prefix_values(prefix).collect()
+                };
                 if !results.is_empty() {
                     break;
                 }
+                return results;
             }
         }
-
-        results
+        Vec::new()
     }
 }
 
 pub struct Ctx {
     pub parser: tree_sitter::Parser,
     pub documents: HashMap<Uri, Document>,  // all opened files
+    /// 字符串池：使用 HashSet 存储所有符号名称，通过 Rc 共享
+    pub symbol_names: HashSet<Rc<CompactString>>,
     pub symbols: Symbols,
     pub functions: HashSet<CompactString>,
     pub include_cache: HashSet<Uri>,
@@ -206,6 +202,38 @@ pub struct Ctx {
     pub symbol_definitions: HashMap<String, Vec<SymbolDefinition>>,
     /// 对象成员路径 -> 定义位置 (如 "a/b/c" -> c 的定义)
     pub member_definitions: HashMap<String, SymbolDefinition>,
+}
+
+impl Ctx {
+    /// 获取或插入符号名称到字符串池，返回 Rc 引用
+    pub fn get_or_insert_symbol(&mut self, name: &str) -> Rc<CompactString> {
+        let cs = CompactString::from(name);
+        // 检查是否已存在
+        if let Some(existing) = self.symbol_names.get(&cs) {
+            return Rc::clone(existing);
+        }
+        // 插入新的
+        let rc = Rc::new(cs);
+        self.symbol_names.insert(Rc::clone(&rc));
+        rc
+    }
+
+    pub fn new() -> Self {
+        let mut parser = tree_sitter::Parser::new();
+        let lang = tree_sitter_red::LANGUAGE;
+        parser.set_language(&lang.into()).expect("Failed to set language");
+        Self {
+            parser,
+            documents: HashMap::new(),
+            symbols: Symbols::new(),
+            symbol_names: HashSet::new(),
+            functions: HashSet::new(),
+            include_cache: HashSet::new(),
+            object_graph: ObjectGraph::new(),
+            symbol_definitions: HashMap::new(),
+            member_definitions: HashMap::new(),
+        }
+    }
 }
 
 fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&'a str> {
@@ -220,22 +248,6 @@ fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&
 }
 
 impl Ctx {
-    pub fn new() -> Self {
-        let mut parser = tree_sitter::Parser::new();
-        let lang = tree_sitter_red::LANGUAGE;
-        parser.set_language(&lang.into()).expect("Failed to set language");
-        Self {
-            parser,
-            documents: HashMap::new(),
-            symbols: Symbols::new(),
-            functions: HashSet::new(),
-            include_cache: HashSet::new(),
-            object_graph: ObjectGraph::new(),
-            symbol_definitions: HashMap::new(),
-            member_definitions: HashMap::new(),
-        }
-    }
-
     /// 获取路径补全建议（实时从文件系统读取）
     pub fn get_path_completions(&self, prefix: &str, file_uri: &Uri) -> Vec<PathCompletionItem> {
         // 获取文件所在目录
@@ -254,7 +266,7 @@ impl Ctx {
     }
 
     /// 获取对象成员补全
-    pub fn get_object_completions(&self, object_path: &str, current_byte_pos: usize, prefix: &str) -> Vec<ObjectMember> {
+    pub fn get_object_completions(&self, object_path: &str, current_byte_pos: usize, prefix: &str) -> Vec<&ObjectMember> {
         self.object_graph.find_members(object_path, current_byte_pos, prefix)
     }
 
@@ -288,9 +300,10 @@ impl Ctx {
 
         // 从对象图中查找对象
         // 尝试找到匹配的对象
-        for (scope_path, obj) in &self.object_graph.objects {
+        for (scope_path, _obj) in &self.object_graph.objects {
             if scope_path == object_path {
-                return obj.def_position.clone();
+                //return obj.def_position.clone();
+                return None;
             }
         }
 
@@ -437,7 +450,6 @@ impl Ctx {
                     results.push(PathCompletionItem {
                         label: name.clone(),
                         is_dir: path.is_dir(),
-                        full_path: path,
                     });
                 }
             }
@@ -491,7 +503,7 @@ impl Ctx {
     }
 
     // Recursive function to collect identifiers from the tree
-    pub fn walk_tree(&mut self, source_code: &str, cursor: &mut tree_sitter::TreeCursor, base_path: Option<&Path>) {
+    pub fn walk_tree(&mut self, source_code: &str, cursor: &mut TreeCursor, base_path: Option<&Path>) {
         loop {
             let node = cursor.node();
             let kind = node.kind();
@@ -554,7 +566,7 @@ impl Ctx {
         None
     }
 
-    pub fn collect_identifiers(&mut self, source_code: &str, tree: &Option<Tree>, file_uri: &Uri) {
+    pub fn collect_identifiers(&mut self, source_code: &str, tree: &Option<Tree>, file_uri: &Uri) -> ObjectNode {
         if let Some(tree) = tree {
             let mut cursor = tree.walk();
             // Convert Uri to file path
@@ -563,10 +575,10 @@ impl Ctx {
                 .and_then(|url| url.to_file_path().ok());
 
             // 收集符号定义位置
-            self.collect_symbol_definitions(source_code, &mut cursor, file_uri);
+            //self.collect_symbol_definitions(source_code, &mut cursor, file_uri);
 
             // 重置 cursor 到根节点
-            while cursor.goto_parent() {}
+            //while cursor.goto_parent() {}
 
             self.walk_tree(source_code, &mut cursor, base_path.as_deref());
 
@@ -574,12 +586,14 @@ impl Ctx {
             while cursor.goto_parent() {}
 
             // 收集对象定义
-            self.collect_objects(source_code, &mut cursor, file_uri);
+            self.collect_objects(source_code, &mut cursor, file_uri)
+        } else {
+            ObjectNode::new()
         }
     }
 
     /// 遍历语法树收集符号定义位置
-    pub fn collect_symbol_definitions(&mut self, source_code: &str, cursor: &mut tree_sitter::TreeCursor, file_uri: &Uri) {
+    pub fn collect_symbol_definitions(&mut self, source_code: &str, cursor: &mut TreeCursor, file_uri: &Uri) {
         self.walk_symbol_tree(source_code, cursor, file_uri, &Vec::new(), false);
     }
 
@@ -587,7 +601,7 @@ impl Ctx {
     fn walk_symbol_tree(
         &mut self,
         source_code: &str,
-        cursor: &mut tree_sitter::TreeCursor,
+        cursor: &mut TreeCursor,
         file_uri: &Uri,
         scope_stack: &[String],
         skip_function_body: bool,
@@ -609,12 +623,9 @@ impl Ctx {
                 if let Some(name) = get_node_text(source_code, &node) {
                     let clean_name = name.trim_end_matches(':');
                     let byte_range = (node.start_byte(), node.end_byte());
-                    let position = self.byte_to_position(source_code, byte_range.0);
 
                     let def = SymbolDefinition {
                         uri: file_uri.clone(),
-                        line: position.0 as u32,
-                        character: position.1 as u32,
                         byte_range,
                     };
 
@@ -665,165 +676,86 @@ impl Ctx {
         }
     }
 
-    /// 将字节偏移量转换为 (line, column) 位置
-    fn byte_to_position(&self, source_code: &str, byte_offset: usize) -> (usize, usize) {
-        let before = &source_code[..byte_offset.min(source_code.len())];
-        let line = before.matches('\n').count();
-        let last_newline = before.rfind('\n').map(|i| i + 1).unwrap_or(0);
-        let column = byte_offset - last_newline;
-        (line, column)
-    }
-
     /// 遍历语法树收集对象（context）定义
-    pub fn collect_objects(&mut self, source_code: &str, cursor: &mut tree_sitter::TreeCursor, file_uri: &Uri) {
-        // 重置 cursor 到根节点
-        while cursor.goto_parent() {}
-
-        self.walk_object_tree(source_code, cursor, &Vec::new(), file_uri);
+    pub fn collect_objects(&mut self, source_code: &str, cursor: &mut TreeCursor, file_uri: &Uri) -> ObjectNode {
+        let mut obj = ObjectNode::new();    // root context
+        obj.byte_range = (0, source_code.len());
+        obj.file_path = file_uri.to_string();
+        self.parse_object_body(source_code, file_uri, cursor, &mut Vec::new(), &mut obj);
+        obj
     }
 
     /// 遍历树收集对象和成员
     /// scope_stack: 当前作用域栈，从外到内
-    fn walk_object_tree(
+    fn parse_object_body(
         &mut self,
         source_code: &str,
-        cursor: &mut tree_sitter::TreeCursor,
-        scope_stack: &[String],
-        file_uri: &Uri,
+        uri: &Uri,
+        cursor: &mut TreeCursor,
+        scope_stack: &mut Vec<String>,
+        scope: &mut ObjectNode
     ) {
         loop {
             let node = cursor.node();
             let kind = node.kind();
+            let mut member_type = MemberType::Value;
+            let mut member_name = String::new();
+
+            if kind == "set_word" {
+                let name = get_node_text(source_code, &node).unwrap();
+                member_name = name.trim_end_matches(':').to_string();
+            }
+
+            if kind == "function" || kind == "does" {
+                let name_node = node.child_by_field_name("name").unwrap();
+                let name = get_node_text(source_code, &name_node).unwrap();
+                member_name = name.trim_end_matches(':').to_string();
+                member_type = MemberType::Function
+            }
 
             // 检测对象定义：obj: context [...] 或 obj: make object! [...]
-            if kind == "assignment" {
-                // 尝试获取对象名称和成员
-                if let Some((obj_name, members, byte_range)) = self.parse_object_with_range(source_code, node) {
-                    // 构建完整作用域路径
-                    let mut scope_path = scope_stack.join("/");
-                    if !scope_path.is_empty() {
-                        scope_path.push('/');
+            if kind == "context" {
+                let mut obj = ObjectNode::new();
+                obj.byte_range = (node.start_byte(), node.end_byte());
+                obj.file_path = uri.to_string();
+
+                // 遍历子节点查找对象名称和成员
+                let mut child_cursor = node.walk();
+
+                for child in node.children(&mut child_cursor) {
+                    let child_kind = child.kind();
+
+                    // 对象名称通常是 set_word (如 obj:)
+                    if child_kind == "set_word" {
+                        let name = get_node_text(source_code, &child).unwrap();
+                        member_name = name.trim_end_matches(':').to_string();
                     }
-                    scope_path.push_str(&obj_name);
 
-                    // 计算对象定义位置
-                    let def_position = {
-                        let pos = self.byte_to_position(source_code, byte_range.0);
-                        Some(SymbolDefinition {
-                            uri: file_uri.clone(),
-                            line: pos.0 as u32,
-                            character: pos.1 as u32,
-                            byte_range,
-                        })
-                    };
-
-                    // 添加对象到图
-                    self.object_graph.add_object(obj_name.clone(), scope_path.clone(), byte_range, def_position);
-
-                    // 添加成员
-                    for member in members {
-                        self.object_graph.add_member(&scope_path, member);
+                    // 查找 context 或 object 关键字后的 block 作为成员
+                    if child_kind == "block" {
+                        let mut body_cursor = node.walk();
+                        if body_cursor.goto_first_child() {
+                            scope_stack.push(member_name.clone());
+                            self.parse_object_body(source_code, uri, &mut body_cursor, scope_stack, &mut obj);
+                            scope_stack.pop();
+                        }
                     }
                 }
+                self.object_graph.add_object(member_name.clone(), scope_stack.join("/"), obj);
+                member_type = MemberType::Object;
             }
 
-            // 递归进入子节点
-            if cursor.goto_first_child() {
-                // 检查是否是新的对象定义（assignment 节点）
-                let child_kind = cursor.node().kind();
-
-                // 对于 assignment 节点，需要将对象名加入作用域栈
-                let new_scope_stack = if child_kind == "assignment" {
-                    if let Some((obj_name, _, _)) = self.parse_object_with_range(source_code, cursor.node()) {
-                        let mut new_stack = scope_stack.to_vec();
-                        new_stack.push(obj_name);
-                        new_stack
-                    } else {
-                        scope_stack.to_vec()
-                    }
-                } else {
-                    scope_stack.to_vec()
-                };
-
-                self.walk_object_tree(source_code, cursor, &new_scope_stack, file_uri);
-                cursor.goto_parent();
+            if !member_name.is_empty() {
+                let name = self.get_or_insert_symbol(&member_name);
+                scope.members.insert(
+                    member_name,
+                    ObjectMember {name, member_type}
+                );
             }
-
             if !cursor.goto_next_sibling() {
                 break;
             }
         }
-    }
-
-    /// 解析对象定义，返回对象名称、成员列表和字节范围
-    fn parse_object_with_range(
-        &self,
-        source_code: &str,
-        node: tree_sitter::Node,
-    ) -> Option<(String, Vec<ObjectMember>, (usize, usize))> {
-        let mut obj_name = None;
-        let mut members = Vec::new();
-        let byte_range = (node.start_byte(), node.end_byte());
-
-        // 遍历子节点查找对象名称和成员
-        let mut child_cursor = node.walk();
-
-        for child in node.children(&mut child_cursor) {
-            let child_kind = child.kind();
-
-            // 对象名称通常是 set_word (如 obj:)
-            if child_kind == "set_word" {
-                if let Some(name) = get_node_text(source_code, &child) {
-                    obj_name = Some(name.trim_end_matches(':').to_string());
-                }
-            }
-
-            // 查找 context 或 object 关键字后的 block 作为成员
-            if child_kind == "block" || child_kind == "body" {
-                // 解析 block 中的成员
-                members = self.parse_object_members(source_code, child);
-            }
-        }
-
-        obj_name.map(|name| (name, members, byte_range))
-    }
-
-    /// 解析对象成员
-    fn parse_object_members(&self, source_code: &str, block_node: tree_sitter::Node) -> Vec<ObjectMember> {
-        let mut members = Vec::new();
-        let mut child_cursor = block_node.walk();
-
-        for child in block_node.children(&mut child_cursor) {
-            let child_kind = child.kind();
-
-            // 成员定义通常是 set_word (如 a: 1)
-            if child_kind == "set_word" {
-                if let Some(name) = get_node_text(source_code, &child) {
-                    let member_name = name.trim_end_matches(':').to_string();
-
-                    // 判断成员类型
-                    let member_type = if let Some(next_sibling) = child.next_sibling() {
-                        let next_kind = next_sibling.kind();
-                        if next_kind == "function" || next_kind == "func" || next_kind == "does" {
-                            MemberType::Function
-                        } else if next_kind == "object" || next_kind == "context" {
-                            MemberType::Object
-                        } else {
-                            MemberType::Value
-                        }
-                    } else {
-                        MemberType::Value
-                    };
-
-                    members.push(ObjectMember {
-                        name: member_name,
-                        member_type,
-                    });
-                }
-            }
-        }
-
-        members
     }
 
     pub fn get_semantic_tokens(&self, content: &Rope, tree: &Option<Tree>) -> Vec<SemanticToken> {
@@ -850,7 +782,7 @@ impl Ctx {
     fn collect_function_tokens(
         &self,
         source_code: &str,
-        cursor: &mut tree_sitter::TreeCursor,
+        cursor: &mut TreeCursor,
         tokens: &mut Vec<(u32, u32, u32, u32, u32)>,
         range: Option<lsp_types::Range>,
     ) {
@@ -1019,21 +951,4 @@ fn encode_semantic_tokens(tokens: Vec<(u32, u32, u32, u32, u32)>) -> Vec<Semanti
     }
 
     result
-}
-
-fn parent_ends_with_dot_dot(path: &Path) -> bool {
-    // Get the parent path as an Option<&Path>
-    if let Some(parent) = path.parent() {
-        // Get the last component of the parent path
-        if let Some(last_component) = parent.components().last() {
-            // Check if the last component is Component::ParentDir, which corresponds to ".."
-            matches!(last_component, std::path::Component::ParentDir)
-        } else {
-            // Parent has no components (e.g., path was already a root or empty)
-            false
-        }
-    } else {
-        // Path has no parent
-        false
-    }
 }

@@ -244,6 +244,8 @@ impl RedLanguageServer {
 
         // 获取光标所在行的内容
         let line_content = self.get_line_at_position(uri, position);
+        if line_content.is_empty() {return None};
+
         let cursor_col = position.character as usize;
         let byte_pos = self.get_byte_offset(uri, position);
 
@@ -258,15 +260,11 @@ impl RedLanguageServer {
 
         // 查找定义
         if let Some(def) = self.ctx.go_to_definition(&symbol_path, byte_pos, uri) {
+            let document = self.ctx.documents.get(uri).unwrap();
+            let pos = offset_to_position(&document.content, def.byte_range.0);
             let range = lsp_types::Range {
-                start: lsp_types::Position {
-                    line: def.line,
-                    character: def.character,
-                },
-                end: lsp_types::Position {
-                    line: def.line,
-                    character: def.character,
-                },
+                start: pos,
+                end: pos
             };
 
             return Some(GotoDefinitionResponse::Scalar(lsp_types::Location {
@@ -611,7 +609,7 @@ fn get_path_completion_items(completions: &Vec<analyzer::PathCompletionItem>) ->
 }
 
 /// 将对象成员转换为 LSP 补全项
-fn get_object_completion_items(members: &Vec<analyzer::ObjectMember>) -> Vec<lsp_types::CompletionItem> {
+fn get_object_completion_items(members: &Vec<&analyzer::ObjectMember>) -> Vec<lsp_types::CompletionItem> {
     members
         .iter()
         .map(|member| {
@@ -622,7 +620,7 @@ fn get_object_completion_items(members: &Vec<analyzer::ObjectMember>) -> Vec<lsp
             };
 
             lsp_types::CompletionItem {
-                label: member.name.clone(),
+                label: member.name.to_string(),
                 kind: Some(kind),
                 ..Default::default()
             }
@@ -914,4 +912,22 @@ fn calculate_new_end_position(_rope: &Rope, range: Range, new_text: &str) -> tre
 fn position_to_offset_rope(rope: &Rope, position: Position) -> usize {
     let char_offset = rope.line_to_char(position.line as usize) + position.character as usize;
     rope.char_to_byte(char_offset)
+}
+
+/// 将字节偏移量转换为 (line, column) 位置
+fn offset_to_position(rope: &Rope, byte_offset: usize) -> Position {
+    // Ropey gives us a way to map byte offsets to character indices
+    let char_idx = rope.byte_to_char(byte_offset);
+
+    // Get the line number containing this character
+    let line = rope.char_to_line(char_idx);
+
+    // Get the character offset within that line
+    let line_start = rope.line_to_char(line);
+    let column = char_idx - line_start;
+
+    Position {
+        line: line as u32,
+        character: column as u32,
+    }
 }
