@@ -6,32 +6,12 @@ use compact_str::CompactString;
 use fast_radix_trie::StringRadixMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use once_cell::sync::Lazy;
 use url::Url;
-
-/// 全局字符串池，存储所有符号名称
-pub static STRING_POOL: Lazy<Mutex<HashSet<CompactString>>> = 
-    Lazy::new(|| Mutex::new(HashSet::new()));
-
-/// 从字符串池获取或插入符号名称，返回 'static 引用
-pub fn get_or_insert_symbol(name: &str) -> &'static CompactString {
-    let mut pool = STRING_POOL.lock().unwrap();
-    // 检查是否已存在
-    if let Some(existing) = pool.get(name) {
-        // 安全：只要 STRING_POOL 存在，引用就有效
-        return unsafe { std::mem::transmute::<&CompactString, &'static CompactString>(existing) };
-    }
-    // 插入新的
-    let cs = CompactString::from(name);
-    pool.insert(cs);
-    // 安全：刚插入的元素在 STRING_POOL 的整个生命周期内都有效
-    unsafe { std::mem::transmute::<&CompactString, &'static CompactString>(pool.get(name).unwrap()) }
-}
 
 pub struct Document {
     pub content: Rope,
     pub tree: Option<Tree>,
+    pub root_object: ObjectNode,
 }
 
 /// 路径补全项
@@ -49,10 +29,10 @@ pub enum MemberType {
     Object,     // 嵌套对象（context）
 }
 
-/// 对象成员 - 使用 'static 引用共享字符串池中的名称
+/// 对象成员 - 使用 CompactString 存储名称
 #[derive(Debug, Clone)]
 pub struct ObjectMember {
-    pub name: &'static CompactString,
+    pub name: CompactString,
     pub member_type: MemberType,
 }
 
@@ -103,6 +83,7 @@ impl ObjectGraph {
 
     /// 添加对象
     pub fn add_object(&mut self, name: String, scope_path: String, obj: ObjectNode) -> &mut ObjectNode {
+        log::info!("----add object: {} scope: {}", name, scope_path);
         // 记录名称到作用域的映射
         self.name_to_scopes.entry(name.clone()).or_insert_with(Vec::new).push(scope_path.clone());
 
@@ -159,8 +140,10 @@ impl ObjectGraph {
     /// 在指定作用域下查找子对象
     fn find_child_object(&self, parent_scope: &str, child_name: &str) -> Option<&ObjectNode> {
         // 获取所有同名对象
+        log::info!("find child: {:?} , {:?}", child_name, self.name_to_scopes);
         let scopes = self.name_to_scopes.get(child_name)?;
-
+        log::info!("parent_scope: {:?}", parent_scope);
+log::info!("find scopes: {:?}", scopes);
         // 查找父作用域匹配的对象
         for scope in scopes {
             // 检查是否是直接子对象
@@ -189,11 +172,6 @@ impl ObjectGraph {
         // 尝试从当前作用域解析对象路径
         for scope in &scopes {
             if let Some(obj) = self.resolve_object_path(object_path, &scope.scope_path) {
-                //for (name, member) in &obj.members {
-                //    if prefix.is_empty() || name.starts_with(prefix) {
-                //        results.push(member.clone());
-                //    }
-                //}
                 let results : Vec<&ObjectMember> = if prefix.is_empty() {
                     obj.members.values().collect()
                 } else {
@@ -205,6 +183,7 @@ impl ObjectGraph {
                 return results;
             }
         }
+        // find in global scope
         Vec::new()
     }
 }
@@ -223,11 +202,6 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    /// 获取或插入符号名称到全局字符串池
-    pub fn get_or_insert_symbol(name: &str) -> &'static CompactString {
-        get_or_insert_symbol(name)
-    }
-
     pub fn new() -> Self {
         let mut parser = tree_sitter::Parser::new();
         let lang = tree_sitter_red::LANGUAGE;
@@ -275,8 +249,31 @@ impl Ctx {
     }
 
     /// 获取对象成员补全
-    pub fn get_object_completions(&self, object_path: &str, current_byte_pos: usize, prefix: &str) -> Vec<&ObjectMember> {
-        self.object_graph.find_members(object_path, current_byte_pos, prefix)
+    pub fn get_object_completions(&self, object_path: &str, current_byte_pos: usize, prefix: &str, file_uri: &Uri) -> Vec<&ObjectMember> {
+        // 首先从 object_graph 查找
+        let results = self.object_graph.find_members(object_path, current_byte_pos, prefix);
+        if !results.is_empty() {
+            return results;
+        }
+
+        // 从 document 的 root_object 查找
+        if let Some(document) = self.documents.get(file_uri) {
+            log::info!("get in root object");
+            let parts: Vec<&str> = object_path.split('/').filter(|s| !s.is_empty()).collect();
+            log::info!("part split: {:?}, {:?}, {:?}", parts, parts.first(), document.root_object.members);
+            if let Some(name) = parts.first() && document.root_object.members.contains_key(name) {
+                if let Some(obj) = self.object_graph.resolve_object_path(object_path, &document.root_object.name) {
+                    let results : Vec<&ObjectMember> = if prefix.is_empty() {
+                        obj.members.values().collect()
+                    } else {
+                        obj.members.common_prefix_values(prefix).collect()
+                    };
+                    return results;
+                }
+            }
+        }
+
+        Vec::new()
     }
 
     /// Go to definition for a symbol or object path
@@ -592,7 +589,7 @@ impl Ctx {
             self.walk_tree(source_code, &mut cursor, base_path.as_deref());
 
             // 重置 cursor 收集对象定义
-            while cursor.goto_parent() {}
+            cursor.reset(tree.root_node());
 
             // 收集对象定义
             self.collect_objects(source_code, &mut cursor, file_uri)
@@ -601,96 +598,18 @@ impl Ctx {
         }
     }
 
-    /// 遍历语法树收集符号定义位置
-    pub fn collect_symbol_definitions(&mut self, source_code: &str, cursor: &mut TreeCursor, file_uri: &Uri) {
-        self.walk_symbol_tree(source_code, cursor, file_uri, &Vec::new(), false);
-    }
-
-    /// 遍历树收集符号定义
-    fn walk_symbol_tree(
-        &mut self,
-        source_code: &str,
-        cursor: &mut TreeCursor,
-        file_uri: &Uri,
-        scope_stack: &[String],
-        skip_function_body: bool,
-    ) {
-        loop {
-            let node = cursor.node();
-            let kind = node.kind();
-
-            // 跳过 function body 内的 set_word
-            // function/does 节点的子节点通常是 [spec block] 或 [block]
-            let current_skip = if kind == "function" || kind == "does" || kind == "func" {
-                true
-            } else {
-                skip_function_body
-            };
-
-            // 收集 set_word 定义（如 obj: 或 a: 1），但跳过 function body 内的
-            if kind == "set_word" && !current_skip {
-                if let Some(name) = get_node_text(source_code, &node) {
-                    let clean_name = name.trim_end_matches(':');
-                    let byte_range = (node.start_byte(), node.end_byte());
-
-                    let def = SymbolDefinition {
-                        uri: file_uri.clone(),
-                        byte_range,
-                    };
-
-                    // 添加到符号定义索引
-                    self.symbol_definitions.entry(clean_name.to_string())
-                        .or_insert_with(Vec::new).push(def.clone());
-
-                    // 如果有作用域，也添加到成员定义索引
-                    if !scope_stack.is_empty() {
-                        let mut full_path = scope_stack.join("/");
-                        full_path.push('/');
-                        full_path.push_str(clean_name);
-                        self.member_definitions.insert(full_path, def);
-                    }
-                }
-            }
-
-            // 递归进入子节点
-            if cursor.goto_first_child() {
-                // 对于 assignment 节点，需要将对象名加入作用域栈
-                let new_scope_stack = if kind == "assignment" {
-                    if let Some(child) = node.child(0) {
-                        if child.kind() == "set_word" {
-                            if let Some(name) = get_node_text(source_code, &child) {
-                                let mut new_stack = scope_stack.to_vec();
-                                new_stack.push(name.trim_end_matches(':').to_string());
-                                new_stack
-                            } else {
-                                scope_stack.to_vec()
-                            }
-                        } else {
-                            scope_stack.to_vec()
-                        }
-                    } else {
-                        scope_stack.to_vec()
-                    }
-                } else {
-                    scope_stack.to_vec()
-                };
-
-                self.walk_symbol_tree(source_code, cursor, file_uri, &new_scope_stack, current_skip);
-                cursor.goto_parent();
-            }
-
-            if !cursor.goto_next_sibling() {
-                break;
-            }
-        }
-    }
-
     /// 遍历语法树收集对象（context）定义
     pub fn collect_objects(&mut self, source_code: &str, cursor: &mut TreeCursor, file_uri: &Uri) -> ObjectNode {
         let mut obj = ObjectNode::new();    // root context
         obj.byte_range = (0, source_code.len());
-        obj.file_path = file_uri.to_string();
-        self.parse_object_body(source_code, file_uri, cursor, &mut Vec::new(), &mut obj);
+        let file_path = file_uri.to_string();
+        if cursor.goto_first_child() {
+            let mut scope_stack: Vec<String> = Vec::new();
+            scope_stack.push(file_path.clone());
+            self.parse_object_body(source_code, file_uri, cursor , &mut scope_stack, &mut obj);
+        }
+        obj.file_path = file_path.clone();
+        obj.name = file_path;
         obj
     }
 
@@ -728,34 +647,29 @@ impl Ctx {
                 obj.byte_range = (node.start_byte(), node.end_byte());
                 obj.file_path = uri.to_string();
 
-                // 遍历子节点查找对象名称和成员
-                let mut child_cursor = node.walk();
+                let name_node = node.child_by_field_name("name").unwrap();
+                let name = get_node_text(source_code, &name_node).unwrap();
+                member_name = name.trim_end_matches(':').to_string();
+                scope_stack.push(member_name.clone());
 
-                for child in node.children(&mut child_cursor) {
-                    let child_kind = child.kind();
-
-                    // 对象名称通常是 set_word (如 obj:)
-                    if child_kind == "set_word" {
-                        let name = get_node_text(source_code, &child).unwrap();
-                        member_name = name.trim_end_matches(':').to_string();
-                    }
-
-                    // 查找 context 或 object 关键字后的 block 作为成员
-                    if child_kind == "block" {
-                        let mut body_cursor = node.walk();
-                        if body_cursor.goto_first_child() {
-                            scope_stack.push(member_name.clone());
-                            self.parse_object_body(source_code, uri, &mut body_cursor, scope_stack, &mut obj);
-                            scope_stack.pop();
-                        }
+                if let Some(body_node) = node.child_by_field_name("body") {
+                    let mut body_cursor = body_node.walk();
+                    if body_cursor.goto_first_child() {
+                        log::info!(">>>>> body");
+                        self.parse_object_body(source_code, uri, &mut body_cursor, scope_stack, &mut obj);
                     }
                 }
-                self.object_graph.add_object(member_name.clone(), scope_stack.join("/"), obj);
+                log::info!("scope_stack: {:?}", scope_stack);
+                if !member_name.is_empty() {
+                    self.object_graph.add_object(member_name.clone(), scope_stack.join("/"), obj);
+                }
                 member_type = MemberType::Object;
+                scope_stack.pop();
             }
 
+            log::info!("member_name: {:?}", member_name);
             if !member_name.is_empty() {
-                let name = Ctx::get_or_insert_symbol(&member_name);
+                let name = CompactString::from(&member_name);
                 scope.members.insert(
                     member_name,
                     ObjectMember {name, member_type}

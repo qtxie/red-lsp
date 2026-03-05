@@ -159,11 +159,12 @@ impl RedLanguageServer {
             None,
         );
 
-        self.ctx.collect_identifiers(&params.text_document.text, &tree, &uri);
+        let root_object = self.ctx.collect_identifiers(&params.text_document.text, &tree, &uri);
 
         let document = analyzer::Document {
             content,
             tree,
+            root_object,
         };
 
         self.ctx.documents.insert(uri, document);
@@ -233,6 +234,19 @@ impl RedLanguageServer {
                 }
             }
         }
+
+        // Update root_object after releasing the borrow on documents
+        // if let Some(document) = self.ctx.documents.get_mut(&params.text_document.uri) {
+        //     let uri = params.text_document.uri.clone();
+        //     let content = document.content.to_string();
+        //     let tree = document.tree.clone();
+
+        //     // Use raw pointer to avoid borrow checker issues
+        //     let doc_ptr = document as *mut analyzer::Document;
+        //     unsafe {
+        //         (*doc_ptr).root_object = self.ctx.collect_objects_only(&content, &tree, &uri);
+        //     }
+        // }
     }
 
     fn handle_goto_definition(
@@ -255,7 +269,7 @@ impl RedLanguageServer {
             path.0
         } else {
             // 单个符号名
-            self.get_word_at_position(uri, position)
+            self.get_word_at_position(&line_content, cursor_col)
         };
 
         // 查找定义
@@ -296,13 +310,14 @@ impl RedLanguageServer {
         if let Some((object_path, member_prefix)) = self.extract_object_path(&line_content, cursor_col) {
             // 对象成员补全 - 需要计算光标的字节位置
             let byte_pos = self.get_byte_offset(uri, position);
-            let members = self.ctx.get_object_completions(&object_path, byte_pos, &member_prefix);
+            log::info!("get object completion");
+            let members = self.ctx.get_object_completions(&object_path, byte_pos, &member_prefix, uri);
             let items = get_object_completion_items(&members);
             return Some(lsp_types::CompletionResponse::Array(items));
         }
 
         // 普通符号补全
-        let prefix = self.get_word_at_position(uri, position);
+        let prefix = self.get_word_at_position(&line_content, cursor_col);
         if prefix.is_empty() {
             return Some(lsp_types::CompletionResponse::Array(vec![]));
         }
@@ -527,39 +542,28 @@ impl RedLanguageServer {
         }
     }
 
-    fn get_word_at_position(&self, uri: &lsp_types::Uri, position: lsp_types::Position) -> String {
-        if let Some(document) = self.ctx.documents.get(uri) {
-            let line_num = position.line as usize;
-            let char_num = position.character as usize;
+    fn get_word_at_position(&self, line_content: &str, char_num: usize) -> String {
+        if line_content.is_empty() {return line_content.to_string()};
 
-            // Get the line content
-            if line_num < document.content.len_lines() {
-                let line_start = document.content.line_to_char(line_num);
-                let line_end = document.content.line_to_char(line_num + 1);
-                let line_content: String = document.content.chars_at(line_start).take(line_end - line_start).collect();
-                if line_content.is_empty() {return line_content};
+        // Get the word at the cursor position
+        let chars: Vec<char> = line_content.chars().collect();
+        let end_num = chars.len();
+        if char_num <= end_num {
+            // Find word start
+            let mut start = char_num;
+            while start > 0 && is_word_char(chars[start - 1]) {
+                start -= 1;
+            }
 
-                // Get the word at the cursor position
-                let chars: Vec<char> = line_content.chars().collect();
-                let end_num = chars.len();
-                if char_num <= end_num {
-                    // Find word start
-                    let mut start = char_num;
-                    while start > 0 && is_word_char(chars[start - 1]) {
-                        start -= 1;
-                    }
+            // Find word end
+            let mut end = char_num;
+            while end < end_num && is_word_char(chars[end]) {
+                end += 1;
+            }
 
-                    // Find word end
-                    let mut end = char_num;
-                    while end < end_num && is_word_char(chars[end]) {
-                        end += 1;
-                    }
-
-                    // Return the word
-                    if start < char_num || end > char_num {
-                        return chars[start..end].iter().collect();
-                    }
-                }
+            // Return the word
+            if start < char_num || end > char_num {
+                return chars[start..end].iter().collect();
             }
         }
         String::new()
@@ -567,7 +571,8 @@ impl RedLanguageServer {
 }
 
 fn is_word_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '_' || c == '?' || c == '!' || c == '&'|| c == '*' || c == '~' || c == '|' || c == '^'
+    c.is_alphanumeric() || c == '-' || c == '?' || c == '!' || c == '_' ||
+    c == '&' || c == '*' || c == '~' || c == '|' || c == '^' || c == '+'
 }
 
 fn get_red_completions(symbols: &Vec<String>) -> Vec<lsp_types::CompletionItem> {
