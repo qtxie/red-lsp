@@ -7,6 +7,7 @@ use fast_radix_trie::StringRadixMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use url::Url;
+use std::collections::BTreeMap;
 
 pub struct Document {
     pub content: Rope,
@@ -65,12 +66,14 @@ impl ObjectNode {
 }
 
 /// 对象图，存储所有定义的对象及其成员
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ObjectGraph {
     /// 作用域路径 -> 对象节点
     pub objects: HashMap<String, ObjectNode>,
     /// 对象名称 -> 所有同名对象的作用域路径列表
     pub name_to_scopes: HashMap<String, Vec<String>>,
+    /// 有序映射，用于快速查找字节位置所在的作用域 (start_byte -> scope_path)
+    range_map: BTreeMap<usize, String>,
 }
 
 impl ObjectGraph {
@@ -78,6 +81,7 @@ impl ObjectGraph {
         Self {
             objects: HashMap::new(),
             name_to_scopes: HashMap::new(),
+            range_map: BTreeMap::new(),
         }
     }
 
@@ -89,23 +93,23 @@ impl ObjectGraph {
         obj.name = name.clone();
         // 记录名称到作用域的映射
         self.name_to_scopes.entry(name.clone()).or_insert_with(Vec::new).push(scope_path.clone());
+        // 同时插入到 range_map 中，用于快速查找
+        self.range_map.insert(obj.byte_range.0, scope_path.clone());
         self.objects.insert(scope_path, obj);
     }
 
     /// 根据字节位置查找当前所在的作用域（从内到外）
     pub fn find_scopes_at_position(&self, byte_pos: usize) -> Vec<&ObjectNode> {
-        let mut scopes: Vec<&ObjectNode> = self.objects.values()
-            .filter(|obj| byte_pos >= obj.byte_range.0 && byte_pos <= obj.byte_range.1)
-            .collect();
-
-        // 按作用域深度排序（深的在前，即内层作用域在前）
-        scopes.sort_by(|a, b| {
-            let depth_a = a.scope_path.matches('/').count();
-            let depth_b = b.scope_path.matches('/').count();
-            depth_b.cmp(&depth_a)
-        });
-
-        scopes
+        // 使用 range_map 快速查找：找到所有 start_byte <= byte_pos 的作用域
+        // 然后过滤出 end_byte >= byte_pos 的作用域
+        // range(..=byte_pos).rev() 从后往前遍历，已经是内层作用域在前，无需再排序
+        self.range_map
+            .range(..=byte_pos)
+            .rev()
+            .filter_map(|(_, scope_path)| {
+                self.objects.get(scope_path).filter(|obj| byte_pos <= obj.byte_range.1)
+            })
+            .collect()
     }
 
     /// 解析对象路径并找到对应的对象
