@@ -1,12 +1,18 @@
 use anyhow::Result;
-use crossbeam_channel::RecvTimeoutError;
+use crossbeam_channel::RecvError;
 use hashbrown::HashMap;
 use lsp_server::{Connection, ExtractError, Message, Request, Response};
 use lsp_types::*;
 use ropey::Rope;
 use tree_sitter::Parser;
+use rust_embed::Embed;
 
 use crate::analyzer;
+
+#[derive(Embed)]
+#[folder = "data/"]
+#[include = "red-builtins.red"]
+struct BuiltinsAsset;
 
 #[derive(Debug, Clone)]
 struct SemanticTokensCache {
@@ -41,8 +47,22 @@ impl RedLanguageServer {
         let mut parser = Parser::new();
         let lang = tree_sitter_red::LANGUAGE;
         parser.set_language(&lang.into()).expect("Failed to set language");
+
+        let mut ctx = analyzer::Ctx::new();
+
+        // 加载嵌入的 red-builtins.red 文件并收集内置符号
+        log::info!("starting server");
+        if let Some(builtins_content) = BuiltinsAsset::get("red-builtins.red") {
+            let builtins_source = std::str::from_utf8(builtins_content.data.as_ref()).unwrap_or("");
+            let builtins_tree = parser.parse(builtins_source, None);
+            // 使用虚拟 URI 表示内置文件
+            let builtins_uri: Uri = "builtin://red-builtins.red".parse().unwrap();
+            ctx.builtin_ctx = ctx.collect_identifiers(builtins_source, &builtins_tree, &builtins_uri);
+            log::info!("Loaded red-builtins.red");
+        }
+
         Self {
-            ctx: analyzer::Ctx::new(),
+            ctx,
             parser,
             capabilities: ClientCapabilities::default(),
             position_encoding: PositionEncoding::default(),
@@ -174,28 +194,26 @@ impl RedLanguageServer {
         if let Some(document) = self.ctx.documents.get_mut(&params.text_document.uri) {
             for change in params.content_changes {
                 if let Some(range) = change.range {
+                    // 在应用更改之前计算旧的字节位置
+                    let start_byte = position_to_offset_rope(&document.content, range.start);
+                    let old_end_byte = position_to_offset_rope(&document.content, range.end);
+                    let new_end_byte = start_byte + change.text.len();
+
+                    // 在应用更改之前计算旧的端点
+                    let start_point = tree_sitter::Point {
+                        row: range.start.line as usize,
+                        column: range.start.character as usize,
+                    };
+                    let old_end_point = tree_sitter::Point {
+                        row: range.end.line as usize,
+                        column: range.end.character as usize,
+                    };
+
                     // Apply the change to the rope
                     apply_content_change(&mut document.content, &change.text, range);
 
                     // Update the tree incrementally if it exists
                     if let Some(ref mut tree) = document.tree {
-                        // Calculate the byte positions and points for the edit
-                        let start_byte = position_to_offset_rope(&document.content, range.start);
-                        let old_end_byte = position_to_offset_rope(&document.content, range.end);
-                        let new_end_byte = start_byte + change.text.len();
-
-                        // Calculate the start and end points
-                        let start_point = tree_sitter::Point {
-                            row: range.start.line as usize,
-                            column: range.start.character as usize,
-                        };
-
-                        // Calculate the old end point based on the original range
-                        let old_end_point = tree_sitter::Point {
-                            row: range.end.line as usize,
-                            column: range.end.character as usize,
-                        };
-
                         // Calculate the new end point based on the inserted text
                         let new_end_position =
                             calculate_new_end_position(&document.content, range, &change.text);
@@ -573,7 +591,7 @@ impl RedLanguageServer {
 /// 快速判断 ASCII 字符是否为单词字符（使用查找表）
 const fn is_ascii_word_char(c: u8) -> bool {
     matches!(c,
-        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' |
+        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'=' |
         b'-' | b'?' | b'!' | b'_' | b'&' | b'*' | b'~' | b'|' | b'^' | b'+'
     )
 }
@@ -656,21 +674,12 @@ pub fn run_server(connection: &Connection) -> Result<()> {
     let server_capabilities = server.handle_initialize(initialize_params)?;
     connection.initialize_finish(id, serde_json::to_value(server_capabilities)?)?;
 
-    // Run the event loop with timeout to detect client disconnect
-    let mut shutdown_requested = false;
     loop {
-        match connection.receiver.recv_timeout(std::time::Duration::from_secs(1)) {
+        match connection.receiver.recv() {
             Ok(msg) => {
                 match msg {
                     Message::Request(req) => {
-                        if connection.handle_shutdown(&req)? {
-                            shutdown_requested = true;
-                        }
-
-                        // Ignore requests after shutdown
-                        if shutdown_requested {
-                            continue;
-                        }
+                        if connection.handle_shutdown(&req)? {return Ok(());}
 
                         let req_result = handle_request(&mut server, req);
 
@@ -690,11 +699,7 @@ pub fn run_server(connection: &Connection) -> Result<()> {
                     }
                 }
             }
-            Err(RecvTimeoutError::Timeout) => {
-                // Continue loop to check for client disconnect
-                continue;
-            }
-            Err(RecvTimeoutError::Disconnected) => {
+            Err(RecvError) => {
                 // Channel disconnected, exit
                 break;
             }
@@ -891,9 +896,19 @@ fn apply_content_change(rope: &mut Rope, new_text: &str, range: Range) {
     let end_line = range.end.line as usize;
     let end_char = range.end.character as usize;
 
+    // 边界检查：确保行号不超出范围
+    let max_line = rope.len_lines().saturating_sub(1);
+    let start_line = start_line.min(max_line);
+    let end_line = end_line.min(max_line);
+
     // Calculate char offsets
     let start_offset = rope.line_to_char(start_line) + start_char;
     let end_offset = rope.line_to_char(end_line) + end_char;
+
+    // 边界检查：确保偏移量不超出 rope 长度
+    let rope_len = rope.len_chars();
+    let start_offset = start_offset.min(rope_len);
+    let end_offset = end_offset.min(rope_len);
 
     // Remove the old range and insert new text
     if end_offset > start_offset {
@@ -929,7 +944,17 @@ fn calculate_new_end_position(_rope: &Rope, range: Range, new_text: &str) -> tre
 }
 
 fn position_to_offset_rope(rope: &Rope, position: Position) -> usize {
-    let char_offset = rope.line_to_char(position.line as usize) + position.character as usize;
+    let line = position.line as usize;
+    let char = position.character as usize;
+
+    // 边界检查：确保行号不超出范围
+    let line = line.min(rope.len_lines().saturating_sub(1));
+
+    let char_offset = rope.line_to_char(line) + char;
+
+    // 边界检查：确保字符偏移量不超出 rope 长度
+    let char_offset = char_offset.min(rope.len_chars());
+
     rope.char_to_byte(char_offset)
 }
 

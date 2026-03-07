@@ -82,12 +82,14 @@ impl ObjectGraph {
     }
 
     /// 添加对象
-    pub fn add_object(&mut self, name: String, scope_path: String, obj: ObjectNode) -> &mut ObjectNode {
+    pub fn add_object(&mut self, name: &String, scope_path: String, mut obj: ObjectNode) {
         log::info!("----add object: {} scope: {}", name, scope_path);
+
+        obj.scope_path = scope_path.clone();
+        obj.name = name.clone();
         // 记录名称到作用域的映射
         self.name_to_scopes.entry(name.clone()).or_insert_with(Vec::new).push(scope_path.clone());
-
-        self.objects.entry(scope_path.clone()).or_insert(obj)
+        self.objects.insert(scope_path, obj);
     }
 
     /// 根据字节位置查找当前所在的作用域（从内到外）
@@ -140,10 +142,10 @@ impl ObjectGraph {
     /// 在指定作用域下查找子对象
     fn find_child_object(&self, parent_scope: &str, child_name: &str) -> Option<&ObjectNode> {
         // 获取所有同名对象
-        log::info!("find child: {:?} , {:?}", child_name, self.name_to_scopes);
+        log::info!("find child: {:?} ", child_name);
         let scopes = self.name_to_scopes.get(child_name)?;
-        log::info!("parent_scope: {:?}", parent_scope);
-log::info!("find scopes: {:?}", scopes);
+        log::info!("parent_scope: {:#?}", parent_scope);
+log::info!("find scopes: {:#?}", scopes);
         // 查找父作用域匹配的对象
         for scope in scopes {
             // 检查是否是直接子对象
@@ -201,6 +203,7 @@ pub struct Ctx {
     pub member_definitions: HashMap<String, SymbolDefinition>,
     /// 节点类型 ID 缓存，避免重复字符串比较
     pub node_kind_ids: HashMap<&'static str, u16>,
+    pub builtin_ctx: ObjectNode,
 }
 
 impl Ctx {
@@ -212,7 +215,7 @@ impl Ctx {
         // 预获取所有节点类型的 kind_id
         let mut node_kind_ids = HashMap::new();
         let lang: tree_sitter::Language = lang.into();
-        for kind_name in ["issue", "file", "word", "set_word", "function", "does", "context", "block", "path", "set_path"] {
+        for kind_name in ["issue", "file", "make", "word", "set_word", "function", "does", "context", "block", "path", "set_path"] {
             node_kind_ids.insert(kind_name, lang.id_for_node_kind(kind_name, true));
         }
 
@@ -226,6 +229,7 @@ impl Ctx {
             symbol_definitions: HashMap::new(),
             member_definitions: HashMap::new(),
             node_kind_ids,
+            builtin_ctx: ObjectNode::new()
         }
     }
 
@@ -275,10 +279,10 @@ impl Ctx {
 
         // 从 document 的 root_object 查找
         if let Some(document) = self.documents.get(file_uri) {
-            log::info!("get in root object");
             let parts: Vec<&str> = object_path.split('/').filter(|s| !s.is_empty()).collect();
-            log::info!("part split: {:?}, {:?}, {:?}", parts, parts.first(), document.root_object.members);
+            log::info!("part split: {:?}, {:?}", parts, parts.first());
             if let Some(name) = parts.first() && document.root_object.members.contains_key(name) {
+                log::info!("get in root object");
                 if let Some(obj) = self.object_graph.resolve_object_path(object_path, &document.root_object.name) {
                     let results : Vec<&ObjectMember> = if prefix.is_empty() {
                         obj.members.values().collect()
@@ -287,6 +291,22 @@ impl Ctx {
                     };
                     return results;
                 }
+            }
+        }
+
+        // 从 builtin_ctx 查找
+        let parts: Vec<&str> = object_path.split('/').filter(|s| !s.is_empty()).collect();
+        if let Some(name) = parts.first() && self.builtin_ctx.members.contains_key(name) {
+            log::info!("get in builtin");
+            log::info!("part split: {:?}, {:?}", parts, parts.first());
+            if let Some(obj) = self.object_graph.resolve_object_path(object_path, &self.builtin_ctx.name) {
+                log::info!("find object !!!");
+                let results : Vec<&ObjectMember> = if prefix.is_empty() {
+                    obj.members.values().collect()
+                } else {
+                    obj.members.common_prefix_values(prefix).collect()
+                };
+                return results;
             }
         }
 
@@ -637,6 +657,13 @@ impl Ctx {
         obj
     }
 
+    /// 从节点的 name 字段提取成员名称
+    fn extract_member_name(source_code: &str, node: &tree_sitter::Node) -> String {
+        let name_node = node.child_by_field_name("name").unwrap();
+        let name = get_node_text(source_code, &name_node).unwrap();
+        name.trim().trim_end_matches(':').to_string()
+    }
+
     /// 遍历树收集对象和成员
     /// scope_stack: 当前作用域栈，从外到内
     fn parse_object_body(
@@ -648,6 +675,10 @@ impl Ctx {
         scope: &mut ObjectNode
     ) {
         // 预获取节点类型 ID
+        let kind_make = self.get_kind_id("make");
+        let kind_block = self.get_kind_id("block");
+        let kind_word = self.get_kind_id("word");
+        let kind_path = self.get_kind_id("path");
         let kind_set_word = self.get_kind_id("set_word");
         let kind_function = self.get_kind_id("function");
         let kind_does = self.get_kind_id("does");
@@ -658,28 +689,41 @@ impl Ctx {
             let kind_id = node.kind_id();
             let mut member_type = MemberType::Value;
             let mut member_name = String::new();
-
+log::info!("node kind: {}", node.kind());
             if kind_id == kind_set_word {
                 let name = get_node_text(source_code, &node).unwrap();
-                member_name = name.trim_end_matches(':').to_string();
-            }
-
-            if kind_id == kind_function || kind_id == kind_does {
-                let name_node = node.child_by_field_name("name").unwrap();
-                let name = get_node_text(source_code, &name_node).unwrap();
-                member_name = name.trim_end_matches(':').to_string();
+                member_name = name.trim().trim_end_matches(':').to_string();
+            } else if kind_id == kind_make {
+                member_name = Self::extract_member_name(source_code, &node);
+                log::info!("make {}", member_name);
+                if let Some(spec) = node.next_sibling() && (spec.kind_id() == kind_word || spec.kind_id() == kind_path) {
+                    let text = get_node_text(source_code, &spec).unwrap();
+                    log::info!("make spec: {} {}", spec.kind(), text);
+                    if let Some(blk) = spec.next_sibling() && blk.kind_id() == kind_block && text == "object!" {
+                        let mut obj = ObjectNode::new();
+                        obj.byte_range = (node.start_byte(), blk.end_byte());
+                        obj.file_path = uri.to_string();
+                        scope_stack.push(member_name.clone());
+                        let mut body_cursor = blk.walk();
+                        if body_cursor.goto_first_child() {
+                            self.parse_object_body(source_code, uri, &mut body_cursor, scope_stack, &mut obj);
+                        }
+                        self.object_graph.add_object(&member_name, scope_stack.join("/"), obj);
+                        member_type = MemberType::Object;
+                        scope_stack.pop();
+                        cursor.goto_next_sibling();
+                        cursor.goto_next_sibling();
+                    }
+                }
+            } else if kind_id == kind_function || kind_id == kind_does {
+                member_name = Self::extract_member_name(source_code, &node);
                 member_type = MemberType::Function
-            }
-
-            // 检测对象定义：obj: context [...] 或 obj: make object! [...]
-            if kind_id == kind_context {
+            } else if kind_id == kind_context {
                 let mut obj = ObjectNode::new();
                 obj.byte_range = (node.start_byte(), node.end_byte());
                 obj.file_path = uri.to_string();
 
-                let name_node = node.child_by_field_name("name").unwrap();
-                let name = get_node_text(source_code, &name_node).unwrap();
-                member_name = name.trim_end_matches(':').to_string();
+                member_name = Self::extract_member_name(source_code, &node);
                 scope_stack.push(member_name.clone());
 
                 if let Some(body_node) = node.child_by_field_name("body") {
@@ -690,14 +734,11 @@ impl Ctx {
                     }
                 }
                 log::info!("scope_stack: {:?}", scope_stack);
-                if !member_name.is_empty() {
-                    self.object_graph.add_object(member_name.clone(), scope_stack.join("/"), obj);
-                }
+                self.object_graph.add_object(&member_name, scope_stack.join("/"), obj);
                 member_type = MemberType::Object;
                 scope_stack.pop();
             }
 
-            log::info!("member_name: {:?}", member_name);
             if !member_name.is_empty() {
                 let name = CompactString::from(&member_name);
                 scope.members.insert(
