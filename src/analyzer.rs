@@ -242,6 +242,15 @@ impl Ctx {
     fn get_kind_id(&self, kind_name: &str) -> u16 {
         *self.node_kind_ids.get(kind_name).unwrap_or(&0)
     }
+
+    /// 解析单行文本并提取符号
+    pub fn parse_line_and_insert_symbols(&mut self, line_text: &str) {
+        let tree = self.parser.parse(line_text, None);
+        if let Some(tree) = tree {
+            let mut cursor = tree.walk();
+            self.walk_tree(line_text, &mut cursor, None);
+        }
+    }
 }
 
 fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&'a str> {

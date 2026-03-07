@@ -191,9 +191,16 @@ impl RedLanguageServer {
     }
 
     fn handle_text_document_did_change(&mut self, params: DidChangeTextDocumentParams) {
-        if let Some(document) = self.ctx.documents.get_mut(&params.text_document.uri) {
-            for change in params.content_changes {
+        let uri = params.text_document.uri.clone();
+        
+        // 收集需要解析的行号
+        let mut lines_to_parse: Vec<usize> = Vec::new();
+        
+        if let Some(document) = self.ctx.documents.get_mut(&uri) {
+            for change in &params.content_changes {
                 if let Some(range) = change.range {
+                    lines_to_parse.push(range.start.line as usize);
+                    
                     // 在应用更改之前计算旧的字节位置
                     let start_byte = position_to_offset_rope(&document.content, range.start);
                     let old_end_byte = position_to_offset_rope(&document.content, range.end);
@@ -252,19 +259,14 @@ impl RedLanguageServer {
                 }
             }
         }
-
-        // Update root_object after releasing the borrow on documents
-        // if let Some(document) = self.ctx.documents.get_mut(&params.text_document.uri) {
-        //     let uri = params.text_document.uri.clone();
-        //     let content = document.content.to_string();
-        //     let tree = document.tree.clone();
-
-        //     // Use raw pointer to avoid borrow checker issues
-        //     let doc_ptr = document as *mut analyzer::Document;
-        //     unsafe {
-        //         (*doc_ptr).root_object = self.ctx.collect_objects_only(&content, &tree, &uri);
-        //     }
-        // }
+        
+        // 解析编辑的行并插入符号（在释放 document 借用后）
+        for line_num in lines_to_parse {
+            if let Some(document) = self.ctx.documents.get(&uri) {
+                let edited_line = document.content.line(line_num).to_string();
+                self.ctx.parse_line_and_insert_symbols(&edited_line);
+            }
+        }
     }
 
     fn handle_goto_definition(
