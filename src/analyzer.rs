@@ -70,10 +70,14 @@ impl ObjectNode {
 pub struct ObjectGraph {
     /// 作用域路径 -> 对象节点
     pub objects: HashMap<String, ObjectNode>,
-    /// 对象名称 -> 所有同名对象的作用域路径列表
-    pub name_to_scopes: HashMap<String, Vec<String>>,
+    /// 对象名称 -> 该名称的所有对象作用域路径 (使用 HashSet 加速移除)
+    pub name_to_scopes: HashMap<String, HashSet<String>>,
     /// 有序映射，用于快速查找字节位置所在的作用域 (start_byte -> scope_path)
     range_map: BTreeMap<usize, String>,
+    /// 文件路径 -> 该文件中的所有对象作用域路径，用于快速移除
+    file_to_scopes: HashMap<String, Vec<String>>,
+    /// 作用域路径 -> 对象名称，用于快速从 name_to_scopes 中移除
+    scope_to_name: HashMap<String, String>,
 }
 
 impl ObjectGraph {
@@ -82,6 +86,8 @@ impl ObjectGraph {
             objects: HashMap::new(),
             name_to_scopes: HashMap::new(),
             range_map: BTreeMap::new(),
+            file_to_scopes: HashMap::new(),
+            scope_to_name: HashMap::new(),
         }
     }
 
@@ -91,10 +97,16 @@ impl ObjectGraph {
 
         obj.scope_path = scope_path.clone();
         obj.name = name.clone();
-        // 记录名称到作用域的映射
-        self.name_to_scopes.entry(name.clone()).or_insert_with(Vec::new).push(scope_path.clone());
+        let file_path = obj.file_path.clone();
+        
+        // 记录名称到作用域的映射 (使用 HashSet)
+        self.name_to_scopes.entry(name.clone()).or_insert_with(HashSet::new).insert(scope_path.clone());
         // 同时插入到 range_map 中，用于快速查找
         self.range_map.insert(obj.byte_range.0, scope_path.clone());
+        // 记录文件到作用域的映射，用于快速移除
+        self.file_to_scopes.entry(file_path).or_insert_with(Vec::new).push(scope_path.clone());
+        // 记录作用域到名称的映射，用于快速从 name_to_scopes 中移除
+        self.scope_to_name.insert(scope_path.clone(), name.clone());
         self.objects.insert(scope_path, obj);
     }
 
@@ -110,6 +122,41 @@ impl ObjectGraph {
                 self.objects.get(scope_path).filter(|obj| byte_pos <= obj.byte_range.1)
             })
             .collect()
+    }
+
+    /// 移除文件相关的所有对象 - O(k) 时间复杂度，k 为该文件的对象数量
+    pub fn remove_objects_by_file(&mut self, file_path: &str) {
+        // 直接从 file_to_scopes 获取该文件的所有作用域
+        let scopes_to_remove = match self.file_to_scopes.remove(file_path) {
+            Some(scopes) => scopes,
+            None => return,  // 文件不存在，直接返回
+        };
+
+        // 移除对象并从 name_to_scopes 中移除
+        for scope_path in &scopes_to_remove {
+            self.objects.remove(scope_path);
+            // 通过 scope_to_name 直接找到对应的名称，然后从 name_to_scopes 中移除
+            if let Some(name) = self.scope_to_name.remove(scope_path) {
+                if let Some(scopes) = self.name_to_scopes.get_mut(&name) {
+                    scopes.remove(scope_path);
+                    // 如果该名称下没有作用域了，删除该条目
+                    if scopes.is_empty() {
+                        self.name_to_scopes.remove(&name);
+                    }
+                }
+            }
+        }
+
+        // 重建 range_map
+        self.rebuild_range_map();
+    }
+
+    /// 重建 range_map
+    fn rebuild_range_map(&mut self) {
+        self.range_map.clear();
+        for (scope_path, obj) in &self.objects {
+            self.range_map.insert(obj.byte_range.0, scope_path.clone());
+        }
     }
 
     /// 解析对象路径并找到对应的对象
@@ -146,10 +193,7 @@ impl ObjectGraph {
     /// 在指定作用域下查找子对象
     fn find_child_object(&self, parent_scope: &str, child_name: &str) -> Option<&ObjectNode> {
         // 获取所有同名对象
-        log::info!("find child: {:?} ", child_name);
         let scopes = self.name_to_scopes.get(child_name)?;
-        log::info!("parent_scope: {:#?}", parent_scope);
-log::info!("find scopes: {:#?}", scopes);
         // 查找父作用域匹配的对象
         for scope in scopes {
             // 检查是否是直接子对象

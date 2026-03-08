@@ -438,8 +438,17 @@ impl RedLanguageServer {
     }
 
     fn handle_text_document_did_close(&mut self, params: DidCloseTextDocumentParams) {
-        self.ctx.documents.remove(&params.text_document.uri);
-        self.semantic_tokens_cache.remove(&params.text_document.uri);
+        let uri = &params.text_document.uri;
+
+        // 如果是 include 缓存中的文件，不从 object_graph 中移除（因为可能被多个文件引用）
+        if !self.ctx.include_cache.contains(uri) {
+            // 从 object_graph 中移除该文件的对象
+            let file_path = uri.to_string();
+            self.ctx.object_graph.remove_objects_by_file(&file_path);
+        }
+
+        self.ctx.documents.remove(uri);
+        self.semantic_tokens_cache.remove(uri);
     }
 
     fn handle_semantic_tokens_full(
