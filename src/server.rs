@@ -168,6 +168,7 @@ impl RedLanguageServer {
     fn handle_text_document_did_open(&mut self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri.clone();
         let content = Rope::from_str(&params.text_document.text);
+        self.ctx.current_uri = Some(uri.clone());
 
         // Parse initial tree using callback
         let tree = self.parser.parse_with_options(
@@ -192,15 +193,16 @@ impl RedLanguageServer {
 
     fn handle_text_document_did_change(&mut self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri.clone();
-        
+        self.ctx.current_uri = Some(uri.clone());
+
         // 收集需要解析的行号
         let mut lines_to_parse: Vec<usize> = Vec::new();
-        
+
         if let Some(document) = self.ctx.documents.get_mut(&uri) {
             for change in &params.content_changes {
                 if let Some(range) = change.range {
                     lines_to_parse.push(range.start.line as usize);
-                    
+
                     // 在应用更改之前计算旧的字节位置
                     let start_byte = position_to_offset_rope(&document.content, range.start);
                     let old_end_byte = position_to_offset_rope(&document.content, range.end);
@@ -259,7 +261,7 @@ impl RedLanguageServer {
                 }
             }
         }
-        
+
         // 解析编辑的行并插入符号（在释放 document 借用后）
         for line_num in lines_to_parse {
             if let Some(document) = self.ctx.documents.get(&uri) {
@@ -270,11 +272,12 @@ impl RedLanguageServer {
     }
 
     fn handle_goto_definition(
-        &self,
+        &mut self,
         params: GotoDefinitionParams,
     ) -> Option<GotoDefinitionResponse> {
         let uri = &params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
+        self.ctx.current_uri = Some(uri.clone());
 
         // 获取光标所在行的内容
         let line_content = self.get_line_at_position(uri, position);
@@ -293,26 +296,14 @@ impl RedLanguageServer {
         };
 
         // 查找定义
-        if let Some(def) = self.ctx.go_to_definition(&symbol_path, byte_pos, uri) {
-            let document = self.ctx.documents.get(uri).unwrap();
-            let pos = offset_to_position(&document.content, def.byte_range.0);
-            let range = lsp_types::Range {
-                start: pos,
-                end: pos
-            };
-
-            return Some(GotoDefinitionResponse::Scalar(lsp_types::Location {
-                uri: def.uri,
-                range,
-            }));
-        }
 
         None
     }
 
-    fn handle_completion(&self, params: CompletionParams) -> Option<lsp_types::CompletionResponse> {
+    fn handle_completion(&mut self, params: CompletionParams) -> Option<lsp_types::CompletionResponse> {
         let uri = &params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
+        self.ctx.current_uri = Some(uri.clone());
 
         // 获取光标所在行的内容，判断是否是路径补全
         let line_content = self.get_line_at_position(uri, position);
@@ -326,11 +317,11 @@ impl RedLanguageServer {
             return Some(lsp_types::CompletionResponse::Array(items));
         }
 
-        // 检查是否是对象成员补全（包含 / 但不以 % 开头）
+        // 检查是否是对象成员/函数 refinement 补全（包含 / 但不以 % 开头）
         if let Some((object_path, member_prefix)) = self.extract_object_path(&line_content, cursor_col) {
             // 对象成员补全 - 需要计算光标的字节位置
             let byte_pos = self.get_byte_offset(uri, position);
-            log::info!("get object completion");
+            log::info!("start path completion");
             let members = self.ctx.get_object_completions(&object_path, byte_pos, &member_prefix, uri);
             let items = get_object_completion_items(&members);
             return Some(lsp_types::CompletionResponse::Array(items));
@@ -439,6 +430,7 @@ impl RedLanguageServer {
 
     fn handle_text_document_did_close(&mut self, params: DidCloseTextDocumentParams) {
         let uri = &params.text_document.uri;
+        self.ctx.current_uri = Some(uri.clone());
 
         // 如果是 include 缓存中的文件，不从 object_graph 中移除（因为可能被多个文件引用）
         if !self.ctx.include_cache.contains(uri) {
@@ -456,6 +448,7 @@ impl RedLanguageServer {
         params: SemanticTokensParams,
     ) -> Option<SemanticTokensResult> {
         let uri = params.text_document.uri.clone();
+        self.ctx.current_uri = Some(uri.clone());
         if let Some(document) = self.ctx.documents.get(&uri) {
             let tokens = self.ctx.get_semantic_tokens(&document.content, &document.tree);
 
@@ -487,6 +480,7 @@ impl RedLanguageServer {
     ) -> Option<SemanticTokensFullDeltaResult> {
         let uri = params.text_document.uri.clone();
         let previous_result_id = params.previous_result_id;
+        self.ctx.current_uri = Some(uri.clone());
 
         // 1. Fetch previous state from cache
         let cached = self.semantic_tokens_cache.get(&uri);
@@ -545,11 +539,12 @@ impl RedLanguageServer {
     }
 
     fn handle_semantic_tokens_range(
-        &self,
+        &mut self,
         params: SemanticTokensRangeParams,
     ) -> Option<SemanticTokensResult> {
         let uri = &params.text_document.uri;
         let range = params.range;
+        self.ctx.current_uri = Some(uri.clone());
 
         if let Some(document) = self.ctx.documents.get(uri) {
             // Get tokens only within the requested range - no filtering needed
@@ -672,6 +667,19 @@ fn get_object_completion_items(members: &Vec<&analyzer::ObjectMember>) -> Vec<ls
                 kind: Some(kind),
                 ..Default::default()
             }
+        })
+        .collect()
+}
+
+/// 将函数 refinements 转换为 LSP 补全项
+fn get_refinement_completion_items(refinements: &Vec<String>, prefix: &str) -> Vec<lsp_types::CompletionItem> {
+    refinements
+        .iter()
+        .filter(|refi| refi.starts_with(prefix))
+        .map(|refi| lsp_types::CompletionItem {
+            label: format!("/{}", refi),
+            kind: Some(lsp_types::CompletionItemKind::KEYWORD),
+            ..Default::default()
         })
         .collect()
 }
