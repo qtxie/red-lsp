@@ -6,7 +6,6 @@ use compact_str::CompactString;
 use fast_radix_trie::StringRadixMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use url::Url;
 use std::collections::BTreeMap;
 
@@ -36,7 +35,8 @@ pub enum MemberType {
 pub struct ObjectMember {
     pub name: CompactString,
     pub member_type: MemberType,
-    pub byte_range: (usize, usize),
+    /// 如果是函数，存储其 spec 内容（参数和 refinements）
+    pub spec_content: Option<String>,
 }
 
 /// 对象节点，表示一个 context 对象
@@ -182,7 +182,7 @@ log::info!("resolve_object_path: {} - {} - {}", path, current_scope, parts.len()
                 current_path = obj.scope_path.clone();
             } else {
                 // part might be a function
-                return (parent_obj, false, Some(String::from(part.clone())));
+                return (parent_obj, false, Some(part.to_string()));
             }
         }
 
@@ -271,32 +271,15 @@ impl Ctx {
 
 
     /// 从定义位置获取 refinements
-    fn get_refinements_from_member(&self, def: &ObjectMember, file_uri: &Uri) -> Option<Vec<ObjectMember>> {
-        // 获取文档和语法树
-        let document = self.documents.get(file_uri)?;
-        let tree = document.tree.as_ref()?;
-        let source_code = document.content.to_string();
+    fn get_refinements_from_member(&self, def: &ObjectMember) -> Option<Vec<ObjectMember>> {
+        log::info!("member spec: {:?}", def.spec_content);
+        if let Some(spec) = &def.spec_content {
+            let mut parser = tree_sitter::Parser::new();
+            let lang = tree_sitter_red::LANGUAGE;
+            parser.set_language(&lang.into()).expect("Failed to set language");
 
-        // 从定义位置解析函数 spec
-        self.extract_refinements_from_tree(&source_code, tree, def.byte_range)
-    }
-
-    /// 从语法树中提取函数的 refinements
-    fn extract_refinements_from_tree(&self, source_code: &str, tree: &Tree, range: (usize, usize)) -> Option<Vec<ObjectMember>> {
-        log::info!("extra refinement: {:?}", range);
-        if let Some(node) = tree.root_node().descendant_for_byte_range(range.0 + 5, range.1 - 5) {
-            let kind_function = self.get_kind_id("function");
-            let kind_id = node.kind_id();
-            if let Some(text) = get_node_text(source_code, &node) {
-                log::info!("extra refinement find node: {} - {}", node.kind(), text);
-            }
-
-            if kind_id == kind_function {
-                if let Some(spec_node) = node.child_by_field_name("spec") {
-                    if spec_node.kind() == "block" {
-                        return self.extract_refinements_from_block(source_code, spec_node);
-                    }
-                }
+            if let Some(tree) = parser.parse(spec, None) {
+                return self.extract_refinements_from_block(spec, tree.root_node());
             }
         }
         None
@@ -316,7 +299,7 @@ impl Ctx {
                             results.push(ObjectMember {
                                 name: CompactString::from(ref_name),
                                 member_type: MemberType::Value,
-                                byte_range: (node.start_byte(), node.end_byte())
+                                spec_content: None
                             });
                         }
                     }
@@ -366,7 +349,7 @@ impl Ctx {
     }
 
     /// 查找对象成员补全
-    pub fn find_members(&self, object_path: &str, current_byte_pos: usize, prefix: &str) -> Vec<&ObjectMember> {
+    pub fn find_members(&self, object_path: &str, current_byte_pos: usize, prefix: &str) -> Vec<ObjectMember> {
         // 首先找到当前光标所在的作用域
         let scopes = self.object_graph.find_scopes_at_position(current_byte_pos);
 
@@ -382,7 +365,7 @@ impl Ctx {
     }
 
     /// 获取对象成员补全
-    pub fn get_object_completions(&self, object_path: &str, current_byte_pos: usize, prefix: &str, file_uri: &Uri) -> Vec<&ObjectMember> {
+    pub fn get_object_completions(&self, object_path: &str, current_byte_pos: usize, prefix: &str, file_uri: &Uri) -> Vec<ObjectMember> {
         // 首先从 object_graph 查找
         let results = self.find_members(object_path, current_byte_pos, prefix);
         if !results.is_empty() {
@@ -406,7 +389,7 @@ impl Ctx {
     }
 
     /// 从指定对象中获取成员补全
-    fn get_members_from_object(&self, object_path: &str, prefix: &str, root_object: &ObjectNode) -> Option<Vec<&ObjectMember>> {
+    fn get_members_from_object(&self, object_path: &str, prefix: &str, root_object: &ObjectNode) -> Option<Vec<ObjectMember>> {
         let parts: Vec<&str> = object_path.split('/').filter(|s| !s.is_empty()).collect();
         if let Some(name) = parts.first() {
             if root_object.members.contains_key(name) {
@@ -414,10 +397,9 @@ impl Ctx {
                    return Some(results);
                 } else {
                     // try to find it in root_object
+                    log::info!("finding it in root");
                     if let Some(member) = root_object.members.get(name) && member.member_type == MemberType::Function {
-                        let uri: Uri = root_object.file_path.parse().expect("wrong file path");
-                        log::info!("file uri: {:?}", uri);
-                        self.get_refinements_from_member(member, &uri);
+                       return self.get_refinements_from_member(member);
                     }
                 }
             }
@@ -425,15 +407,15 @@ impl Ctx {
         None
     }
 
-    fn get_members_or_refiments(&self, object_path: &str, prefix: &str, scope_path: &str) -> Option<Vec<&ObjectMember>> {
+    fn get_members_or_refiments(&self, object_path: &str, prefix: &str, scope_path: &str) -> Option<Vec<ObjectMember>> {
         let (obj, is_found, word) = self.object_graph.resolve_object_path(object_path, scope_path);
         log::info!("is found?: {}", is_found);
         if is_found {
             let obj = obj.unwrap();
-            let results : Vec<&ObjectMember> = if prefix.is_empty() {
-                obj.members.values().collect()
+            let results : Vec<ObjectMember> = if prefix.is_empty() {
+                obj.members.values().cloned().collect()
             } else {
-                obj.members.common_prefix_values(prefix).collect()
+                obj.members.common_prefix_values(prefix).cloned().collect()
             };
             return Some(results);
         } else {
@@ -442,8 +424,7 @@ impl Ctx {
                 let part = word.unwrap();
                 log::info!("finding function in object");
                 if let Some(member) = obj.members.get(part) && member.member_type == MemberType::Function {
-                    let uri = self.current_uri.as_ref().unwrap();
-                    self.get_refinements_from_member(member, uri);
+                    return self.get_refinements_from_member(member);
                 }
             }
         }
@@ -791,10 +772,23 @@ log::info!("node kind: {}", node.kind());
 
             if !member_name.is_empty() {
                 let name = CompactString::from(&member_name);
-                let byte_range = (node.start_byte(), node.end_byte());
+                // 如果是函数，提取 spec 内容
+                let spec_content = if member_type == MemberType::Function {
+                    if let Some(spec_node) = node.child_by_field_name("spec") {
+                        if spec_node.kind() == "block" {
+                            get_node_text(source_code, &spec_node).map(|s| s.trim().trim_start_matches("[").trim_end_matches("]").to_string())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
                 scope.members.insert(
                     member_name,
-                    ObjectMember {name, member_type, byte_range}
+                    ObjectMember {name, member_type, spec_content}
                 );
             }
             if !cursor.goto_next_sibling() {

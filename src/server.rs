@@ -284,10 +284,10 @@ impl RedLanguageServer {
         if line_content.is_empty() {return None};
 
         let cursor_col = position.character as usize;
-        let byte_pos = self.get_byte_offset(uri, position);
+        let _byte_pos = self.get_byte_offset(uri, position);
 
         // 提取要跳转的符号或路径
-        let symbol_path = if let Some(path) = self.extract_object_path(&line_content, cursor_col) {
+        let _symbol_path = if let Some(path) = self.extract_object_path(&line_content, cursor_col) {
             // 对象路径，如 "a/b/c"
             path.0
         } else {
@@ -652,7 +652,7 @@ fn get_path_completion_items(completions: &Vec<analyzer::PathCompletionItem>) ->
 }
 
 /// 将对象成员转换为 LSP 补全项
-fn get_object_completion_items(members: &Vec<&analyzer::ObjectMember>) -> Vec<lsp_types::CompletionItem> {
+fn get_object_completion_items(members: &Vec<analyzer::ObjectMember>) -> Vec<lsp_types::CompletionItem> {
     members
         .iter()
         .map(|member| {
@@ -667,19 +667,6 @@ fn get_object_completion_items(members: &Vec<&analyzer::ObjectMember>) -> Vec<ls
                 kind: Some(kind),
                 ..Default::default()
             }
-        })
-        .collect()
-}
-
-/// 将函数 refinements 转换为 LSP 补全项
-fn get_refinement_completion_items(refinements: &Vec<String>, prefix: &str) -> Vec<lsp_types::CompletionItem> {
-    refinements
-        .iter()
-        .filter(|refi| refi.starts_with(prefix))
-        .map(|refi| lsp_types::CompletionItem {
-            label: format!("/{}", refi),
-            kind: Some(lsp_types::CompletionItemKind::KEYWORD),
-            ..Default::default()
         })
         .collect()
 }
