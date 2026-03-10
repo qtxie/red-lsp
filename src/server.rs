@@ -105,7 +105,8 @@ impl RedLanguageServer {
                     legend: SemanticTokensLegend {
                         token_types: vec![
                             SemanticTokenType::FUNCTION,
-                            SemanticTokenType::KEYWORD,
+                            SemanticTokenType::VARIABLE,
+                            SemanticTokenType::NAMESPACE,
                         ],
                         token_modifiers: vec![],
                     },

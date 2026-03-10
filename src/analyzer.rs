@@ -1,5 +1,6 @@
 use hashbrown::{HashMap, HashSet};
-use lsp_types::{SemanticToken, Uri};
+use lsp_types::lsif::RangeBasedDocumentSymbol;
+use lsp_types::{SemanticToken, SemanticTokenType, Uri};
 use ropey::Rope;
 use tree_sitter::{Tree, TreeCursor};
 use compact_str::CompactString;
@@ -8,6 +9,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use url::Url;
 use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenType {    // @@ need to sync with SemanticTokensLegend
+    RedFunction,
+    RedVariable,
+    RedCtx,
+}
 
 pub struct Document {
     pub content: Rope,
@@ -86,6 +94,9 @@ impl ObjectGraph {
         }
     }
 
+    pub fn get(&self, path: &str) -> Option<&ObjectNode> {
+        self.objects.get(path)
+    }
     /// 添加对象
     pub fn add_object(&mut self, name: &String, scope_path: String, mut obj: ObjectNode) {
         log::info!("----add object: {} scope: {}", name, scope_path);
@@ -237,7 +248,9 @@ impl Ctx {
         // 预获取所有节点类型的 kind_id
         let mut node_kind_ids = HashMap::new();
         let lang: tree_sitter::Language = lang.into();
-        for kind_name in ["issue", "file", "make", "word", "set_word", "function", "does", "context", "block", "path", "set_path"] {
+        for kind_name in [
+            "issue", "file", "make", "word", "set_word", "function", "does", "context",
+            "block", "path", "set_path"] {
             node_kind_ids.insert(kind_name, lang.id_for_node_kind(kind_name, true));
         }
 
@@ -362,6 +375,42 @@ impl Ctx {
         }
         // find in global scope
         Vec::new()
+    }
+
+    pub fn find_obj(&self, word: &str, start_byte: usize) -> (Option<&ObjectNode>, bool) {
+        // 首先从 object_graph 查找
+        // 首先找到当前光标所在的作用域
+        let scopes = self.object_graph.find_scopes_at_position(start_byte);
+
+        // 尝试从当前作用域解析对象路径
+        for scope in &scopes {
+            let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &scope.scope_path);
+            if is_found {
+                return (obj, false);
+            }
+        }
+        // 从 document 的 root_object 查找
+        if let Some(document) = self.documents.get(self.current_uri.as_ref().unwrap()) {
+            let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &document.root_object.name);
+            if is_found {
+                return (obj, false);
+            } else {
+                if let Some(member) = document.root_object.members.get(word) && member.member_type == MemberType::Function {
+                   return (None, true);
+                }
+            }
+        }
+
+        // 从 builtin_ctx 查找
+        let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &self.builtin_ctx.name);
+        if is_found {
+            return (obj, false);
+        } else {
+            if let Some(member) = self.builtin_ctx.members.get(word) && member.member_type == MemberType::Function {
+                return (None, true);
+            }
+        }
+        (None, false)
     }
 
     /// 获取对象成员补全
@@ -812,8 +861,7 @@ log::info!("node kind: {}", node.kind());
         if let Some(tree) = tree {
             let source_code = content.to_string();
             let mut cursor = tree.walk();
-            let kind_word = self.get_kind_id("word");
-            self.collect_function_tokens(&source_code, &mut cursor, &mut tokens, range, kind_word);
+            self.collect_function_tokens(&source_code, &mut cursor, &mut tokens, range);
         }
 
         encode_semantic_tokens(tokens)
@@ -825,11 +873,29 @@ log::info!("node kind: {}", node.kind());
         cursor: &mut TreeCursor,
         tokens: &mut Vec<(u32, u32, u32, u32, u32)>,
         range: Option<lsp_types::Range>,
-        kind_word: u16,
     ) {
+        let kind_word = self.get_kind_id("word");
+        let kind_path = self.get_kind_id("path");
         loop {
             let node = cursor.node();
             let kind_id = node.kind_id();
+            let mut should_goto_child = true;
+
+            // Handle path nodes: obj/func/ref
+            if kind_id == kind_path {
+                // Skip if outside requested range
+                if let Some(r) = range {
+                    let start_line = node.start_position().row as u32;
+                    if start_line < r.start.line || start_line > r.end.line {
+                        if !cursor.goto_next_sibling() {
+                            break;
+                        }
+                        continue;
+                    }
+                }
+                self.highlight_path_nodes(source_code, &node, tokens);
+                should_goto_child = false;
+            }
 
             // Also highlight word nodes as references
             if kind_id == kind_word {
@@ -839,11 +905,6 @@ log::info!("node kind: {}", node.kind());
                     // Skip if outside requested range
                     if let Some(r) = range {
                         if start_line < r.start.line || start_line > r.end.line {
-                            // Skip this node and its children if outside range
-                            if cursor.goto_first_child() {
-                                self.collect_function_tokens(source_code, cursor, tokens, range, kind_word);
-                                cursor.goto_parent();
-                            }
                             if !cursor.goto_next_sibling() {
                                 break;
                             }
@@ -872,13 +933,91 @@ log::info!("node kind: {}", node.kind());
             }
 
             // Recurse into children
-            if cursor.goto_first_child() {
-                self.collect_function_tokens(source_code, cursor, tokens, range, kind_word);
+            if should_goto_child && cursor.goto_first_child() {
+                self.collect_function_tokens(source_code, cursor, tokens, range);
                 cursor.goto_parent();
             }
 
             if !cursor.goto_next_sibling() {
                 break;
+            }
+        }
+    }
+
+    /// Highlight each word in a path node with appropriate semantic token type
+    /// Path format: obj1/obj2/func/ref
+    fn highlight_path_nodes(
+        &self,
+        source_code: &str,
+        path_node: &tree_sitter::Node,
+        tokens: &mut Vec<(u32, u32, u32, u32, u32)>,
+    ) {
+        let mut cursor = path_node.walk();
+        if !cursor.goto_first_child() {
+            return;
+        }
+
+        let path_start = cursor.node();
+        let start_word = get_node_text(source_code, &path_start).unwrap_or("");
+
+        let (obj, is_func) = self.find_obj(start_word, path_start.start_byte());
+        let start_col = path_start.start_position().column as u32;
+        let end_col = path_start.end_position().column as u32;
+        let length = end_col - start_col - 1; // remove last "/"
+        if is_func {
+            tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedFunction as u32, 0));
+            return;
+        } else {
+            // Collect all word nodes in the path
+            let kind_word = self.get_kind_id("word");
+            let mut path_parts: Vec<(tree_sitter::Node, String)> = Vec::new();
+
+            loop {
+                let node = cursor.node();
+                if node.kind_id() == kind_word {
+                    if let Some(text) = get_node_text(source_code, &node) {
+                        path_parts.push((node, text.to_string()));
+                    }
+                }
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+
+            if path_parts.is_empty() {
+                return;
+            }
+
+            if let Some(obj) = obj {
+                let mut ctx = obj;
+                tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedCtx as u32, 0));
+                let mut check = true;
+                for (part_node, part) in path_parts.iter() {
+                    let mut token_type = TokenType::RedVariable;
+                    if check && let Some(member) = ctx.members.get(part) {
+                        match member.member_type {
+                            MemberType::Function => token_type = TokenType::RedFunction,
+                            MemberType::Object => token_type = TokenType::RedCtx,
+                            MemberType::Value => token_type = TokenType::RedVariable,
+                        }
+                    }
+
+                    let start_col = part_node.start_position().column as u32;
+                    let end_col = part_node.end_position().column as u32;
+                    let length = end_col - start_col;
+                    tokens.push((part_node.start_position().row as u32, start_col, length, token_type.clone() as u32, 0));
+
+                    if token_type == TokenType::RedCtx {
+                        if let Some(obj) = self.object_graph.get(&format!("{}/{}", ctx.scope_path, part)) {
+                            ctx = obj;
+                        } else {
+                            check = false;
+                        }
+                    }
+                    if token_type == TokenType::RedFunction {
+                        check = false;
+                    }
+                }
             }
         }
     }
