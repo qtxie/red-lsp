@@ -11,6 +11,8 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::cell::RefCell;
 
+pub const ANONYMOUS_OBJ: &str = "$anonymous$";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenType {    // @@ need to sync with SemanticTokensLegend
     RedFunction,
@@ -53,7 +55,7 @@ pub struct ObjectMember {
 }
 
 /// 对象节点，表示一个 context 对象
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ObjectNode {
     pub name: String,                    // 对象名称（如 "a"）
     pub scope_path: String,              // 完整作用域路径（如 "a/b/a"）
@@ -78,7 +80,7 @@ impl ObjectNode {
 #[derive(Debug)]
 pub struct ObjectGraph {
     /// 作用域路径 -> 对象节点
-    pub objects: HashMap<String, ObjectNode>,
+    pub objects: HashMap<String, Rc<RefCell<ObjectNode>>>,
     /// 对象名称 -> 该名称的所有对象作用域路径 (使用 HashSet 加速移除)
     pub name_to_scopes: HashMap<String, HashSet<String>>,
     /// 有序映射，用于快速查找字节位置所在的作用域 (start_byte -> scope_path)
@@ -100,11 +102,12 @@ impl ObjectGraph {
         }
     }
 
-    pub fn get(&self, path: &str) -> Option<&ObjectNode> {
+    pub fn get(&self, path: &str) -> Option<&Rc<RefCell<ObjectNode>>> {
         self.objects.get(path)
     }
     /// 添加对象
-    pub fn add_object(&mut self, name: &String, scope_path: String, mut obj: ObjectNode) {
+    pub fn add_object(&mut self, name: &String, scope_path: String, obj: ObjectNode) {
+        let mut obj = obj;
         obj.scope_path = scope_path.clone();
         obj.name = name.clone();
         let file_path = obj.file_path.clone();
@@ -117,11 +120,11 @@ impl ObjectGraph {
         self.file_to_scopes.entry(file_path).or_insert_with(Vec::new).push(scope_path.clone());
         // 记录作用域到名称的映射，用于快速从 name_to_scopes 中移除
         self.scope_to_name.insert(scope_path.clone(), name.clone());
-        self.objects.insert(scope_path, obj);
+        self.objects.insert(scope_path, Rc::new(RefCell::new(obj)));
     }
 
     /// 根据字节位置查找当前所在的作用域（从内到外）
-    pub fn find_scopes_at_position(&self, byte_pos: usize) -> Vec<&ObjectNode> {
+    pub fn find_scopes_at_position(&self, byte_pos: usize) -> Vec<&Rc<RefCell<ObjectNode>>> {
         // 使用 range_map 快速查找：找到所有 start_byte <= byte_pos 的作用域
         // 然后过滤出 end_byte >= byte_pos 的作用域
         // range(..=byte_pos).rev() 从后往前遍历，已经是内层作用域在前，无需再排序
@@ -129,7 +132,7 @@ impl ObjectGraph {
             .range(..=byte_pos)
             .rev()
             .filter_map(|(_, scope_path)| {
-                self.objects.get(scope_path).filter(|obj| byte_pos <= obj.byte_range.1)
+                self.objects.get(scope_path).filter(|obj| byte_pos <= obj.borrow().byte_range.1)
             })
             .collect()
     }
@@ -165,14 +168,14 @@ impl ObjectGraph {
     fn rebuild_range_map(&mut self) {
         self.range_map.clear();
         for (scope_path, obj) in &self.objects {
-            self.range_map.insert(obj.byte_range.0, scope_path.clone());
+            self.range_map.insert(obj.borrow().byte_range.0, scope_path.clone());
         }
     }
 
     /// 解析对象路径并找到对应的对象
     /// path: "a" 或 "a/b" 等
     /// current_scope: 当前所在的作用域路径
-    pub fn resolve_object_path(&self, path: &str, current_scope: &str) -> (Option<&ObjectNode>, bool, Option<String>) {
+    pub fn resolve_object_path(&self, path: &str, current_scope: &str) -> (Option<&Rc<RefCell<ObjectNode>>>, bool, Option<String>) {
         // 将路径分割为部分
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         if parts.is_empty() {
@@ -181,7 +184,7 @@ impl ObjectGraph {
 
         // 从当前作用域开始查找
         let mut current_path = current_scope.to_string();
-        let mut parent_obj: Option<&ObjectNode> = None;
+        let mut parent_obj: Option<&Rc<RefCell<ObjectNode>>> = None;
 
         for (i, part) in parts.iter().enumerate() {
             // 查找在当前路径下名为 part 的对象
@@ -194,7 +197,7 @@ impl ObjectGraph {
                     return (Some(obj), true, None);
                 }
                 parent_obj = found;
-                current_path = obj.scope_path.clone();
+                current_path = obj.borrow().scope_path.clone();
             } else {
                 // part might be a function
                 return (parent_obj, false, Some(part.to_string()));
@@ -205,7 +208,7 @@ impl ObjectGraph {
     }
 
     /// 在指定作用域下查找子对象
-    fn find_child_object(&self, parent_scope: &str, child_name: &str) -> Option<&ObjectNode> {
+    fn find_child_object(&self, parent_scope: &str, child_name: &str) -> Option<&Rc<RefCell<ObjectNode>>> {
         // 获取所有同名对象
         let scopes = self.name_to_scopes.get(child_name)?;
         log::info!("find_child_object: {} -- {:?}", child_name, scopes);
@@ -372,7 +375,8 @@ impl Ctx {
 
         // 尝试从当前作用域解析对象路径
         for scope in &scopes {
-            match self.get_members_or_refiments(object_path, prefix, &scope.scope_path) {
+            let scope_path = scope.borrow().scope_path.clone();
+            match self.get_members_or_refiments(object_path, prefix, &scope_path) {
                 Some(results) => return results,
                 None => break,
             }
@@ -381,27 +385,30 @@ impl Ctx {
         Vec::new()
     }
 
-    pub fn find_obj(&self, word: &str, start_byte: usize) -> (Option<&ObjectNode>, bool) {
+    pub fn find_obj(&self, word: &str, start_byte: usize) -> (Option<ObjectNode>, bool) {
         // 首先从 object_graph 查找
         // 首先找到当前光标所在的作用域
         let scopes = self.object_graph.find_scopes_at_position(start_byte);
 
         // 尝试从当前作用域解析对象路径
         for scope in &scopes {
-            let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &scope.scope_path);
+            let scope_path = scope.borrow().scope_path.clone();
+            let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &scope_path);
             if is_found {
-                return (obj, false);
+                return (obj.map(|v| v.borrow().clone()), false);
             }
         }
         // 从 document 的 root_object 查找
-        if let Some(document) = self.documents.get(self.current_uri.as_ref().unwrap()) {
-            let root_obj = document.root_object.borrow();
-            let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &root_obj.name);
-            if is_found {
-                return (obj, false);
-            } else {
-                if let Some(member) = root_obj.members.get(word) && member.member_type == MemberType::Function {
-                   return (None, true);
+        if let Some(uri) = &self.current_uri {
+            if let Some(document) = self.documents.get(uri) {
+                let root_obj = document.root_object.borrow();
+                let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &root_obj.name);
+                if is_found {
+                    return (obj.map(|v| v.borrow().clone()), false);
+                } else {
+                    if let Some(member) = root_obj.members.get(word) && member.member_type == MemberType::Function {
+                       return (None, true);
+                    }
                 }
             }
         }
@@ -410,7 +417,7 @@ impl Ctx {
         let builtin = self.builtin_ctx.borrow();
         let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &builtin.name);
         if is_found {
-            return (obj, false);
+            return (obj.map(|v| v.borrow().clone()), false);
         } else {
             if let Some(member) = builtin.members.get(word) && member.member_type == MemberType::Function {
                 return (None, true);
@@ -432,6 +439,7 @@ impl Ctx {
         if let Some(document) = self.documents.get(file_uri) {
             let root_obj = document.root_object.borrow();
             if let Some(results) = self.get_members_from_object(object_path, prefix, &*root_obj) {
+                log::info!("current doc result: {:?}", results);
                 return results;
             }
         }
@@ -474,19 +482,37 @@ impl Ctx {
         log::info!("is found?: {}", is_found);
         if is_found {
             let obj = obj.unwrap();
-            let results : Vec<ObjectMember> = if prefix.is_empty() {
-                obj.members.values().cloned().collect()
+            let obj_ref = obj.borrow();
+            if let Some(obj) = &obj_ref.include_obj {
+                let results : Vec<ObjectMember> = if prefix.is_empty() {
+                    obj.borrow().members.values().cloned().collect()
+                } else {
+                    obj.borrow().members.common_prefix_values(prefix).cloned().collect()
+                };
+                return Some(results);
             } else {
-                obj.members.common_prefix_values(prefix).cloned().collect()
-            };
-            return Some(results);
+                let results : Vec<ObjectMember> = if prefix.is_empty() {
+                    obj_ref.members.values().cloned().collect()
+                } else {
+                    obj_ref.members.common_prefix_values(prefix).cloned().collect()
+                };
+                return Some(results);
+            }
         } else {
             // obj is the last object found
             if let Some(obj) = obj {
                 let part = word.unwrap();
                 log::info!("finding function in object");
-                if let Some(member) = obj.members.get(part) && Self::is_any_func(member.member_type.clone()) {
-                    return self.get_refinements_from_member(member);
+                let obj_ref = obj.borrow();
+                if let Some(obj) = &obj_ref.include_obj {
+                    let obj_ref = obj.borrow();
+                    if let Some(member) = obj_ref.members.get(part.clone()) && Self::is_any_func(member.member_type.clone()) {
+                        return self.get_refinements_from_member(member);
+                    }
+                }{
+                    if let Some(member) = obj_ref.members.get(part) && Self::is_any_func(member.member_type.clone()) {
+                        return self.get_refinements_from_member(member);
+                    }
                 }
             }
         }
@@ -822,7 +848,7 @@ impl Ctx {
                     let (include_uri, _) = Self::red_file_to_uri(&include_path, base_dir);
                     scope_stack.push(member_name.clone());
                     let include_obj = if let Some(include_uri) = include_uri {
-                        self.include_cache.get(&include_uri).cloned()
+                        self.object_graph.get(&format!("{}/{}", include_uri.as_str(), ANONYMOUS_OBJ)).cloned()
                     } else {None};
                     self.object_graph.add_object(&member_name, scope_stack.join("/"),
                         ObjectNode {
@@ -910,11 +936,27 @@ impl Ctx {
                 if let Some(include_uri) = include_uri {
                      if let Some(obj) = self.include_cache.get(&include_uri) {
                          for (key, value) in obj.borrow().members.iter() {
+                             if value.member_type == MemberType::Object {
+                                 scope_stack.push(key.clone());
+                                 let include_obj = self.object_graph.find_child_object(&include_uri.to_string(), &key).cloned();
+                                 self.object_graph.add_object(&key, scope_stack.join("/"),
+                                     ObjectNode {
+                                         name: member_name.clone(),
+                                         scope_path: scope_stack.join("/"),
+                                         byte_range: (node.start_byte(), file_node.end_byte()),
+                                         file_path: include_uri.to_string(),
+                                         include_obj,
+                                         ..Default::default()
+                                     });
+                                 scope_stack.pop();
+                             }
                              scope.members.insert(key.clone(), value.clone());
                          }
                      }
                  }
                  cursor.goto_next_sibling();
+            } else if kind_id == kind_word && let Some(blk) = node.next_sibling() && blk.kind_id() == kind_block {
+                let name = get_node_text(source_code, &node).unwrap_or("");
             }
 
             if !member_name.is_empty() {
@@ -977,7 +1019,7 @@ impl Ctx {
                         continue;
                     }
                 }
-                self.highlight_path_nodes(source_code, &node, tokens);
+                //self.highlight_path_nodes(source_code, &node, tokens);
                 should_goto_child = false;
             }
 
@@ -1096,7 +1138,7 @@ impl Ctx {
 
                     if token_type == TokenType::RedCtx {
                         if let Some(obj) = self.object_graph.get(&format!("{}/{}", ctx.scope_path, part)) {
-                            ctx = obj;
+                            ctx = obj.borrow().clone();
                         } else {
                             check = false;
                         }
