@@ -1,6 +1,5 @@
 use hashbrown::{HashMap, HashSet};
-use lsp_types::lsif::RangeBasedDocumentSymbol;
-use lsp_types::{SemanticToken, SemanticTokenType, Uri};
+use lsp_types::{SemanticToken, Uri};
 use ropey::Rope;
 use tree_sitter::{Tree, TreeCursor};
 use compact_str::CompactString;
@@ -9,18 +8,21 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use url::Url;
 use std::collections::BTreeMap;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenType {    // @@ need to sync with SemanticTokensLegend
     RedFunction,
     RedVariable,
+    RedKeyword,
     RedCtx,
 }
 
 pub struct Document {
     pub content: Rope,
     pub tree: Option<Tree>,
-    pub root_object: ObjectNode,
+    pub root_object: Rc<RefCell<ObjectNode>>,
 }
 
 /// 路径补全项
@@ -36,6 +38,9 @@ pub enum MemberType {
     Value,      // 普通值（数字、字符串等）
     Function,   // 函数
     Object,     // 嵌套对象（context）
+    Native,
+    Action,
+    Routine,
 }
 
 /// 对象成员 - 使用 CompactString 存储名称
@@ -48,13 +53,14 @@ pub struct ObjectMember {
 }
 
 /// 对象节点，表示一个 context 对象
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct ObjectNode {
     pub name: String,                    // 对象名称（如 "a"）
     pub scope_path: String,              // 完整作用域路径（如 "a/b/a"）
     pub members: StringRadixMap<ObjectMember>,
     pub byte_range: (usize, usize),      // 对象在源代码中的字节范围
     pub file_path: String,
+    pub include_obj: Option<Rc<RefCell<ObjectNode>>>    // link to another object
 }
 
 impl ObjectNode {
@@ -99,8 +105,6 @@ impl ObjectGraph {
     }
     /// 添加对象
     pub fn add_object(&mut self, name: &String, scope_path: String, mut obj: ObjectNode) {
-        log::info!("----add object: {} scope: {}", name, scope_path);
-
         obj.scope_path = scope_path.clone();
         obj.name = name.clone();
         let file_path = obj.file_path.clone();
@@ -174,7 +178,7 @@ impl ObjectGraph {
         if parts.is_empty() {
             return (None, false, None);
         }
-log::info!("resolve_object_path: {} - {} - {}", path, current_scope, parts.len());
+
         // 从当前作用域开始查找
         let mut current_path = current_scope.to_string();
         let mut parent_obj: Option<&ObjectNode> = None;
@@ -231,11 +235,11 @@ pub struct Ctx {
     pub documents: HashMap<Uri, Document>,  // all opened files
     pub symbols: Symbols,
     pub functions: HashSet<CompactString>,
-    pub include_cache: HashSet<Uri>,
+    pub include_cache: HashMap<Uri, Rc<RefCell<ObjectNode>>>,
     pub object_graph: ObjectGraph,  // 对象图
     /// 节点类型 ID 缓存，避免重复字符串比较
     pub node_kind_ids: HashMap<&'static str, u16>,
-    pub builtin_ctx: ObjectNode,
+    pub builtin_ctx: Rc<RefCell<ObjectNode>>,
     pub current_uri: Option<Uri>
 }
 
@@ -259,10 +263,10 @@ impl Ctx {
             documents: HashMap::new(),
             symbols: Symbols::new(),
             functions: HashSet::new(),
-            include_cache: HashSet::new(),
+            include_cache: HashMap::new(),
             object_graph: ObjectGraph::new(),
             node_kind_ids,
-            builtin_ctx: ObjectNode::new(),
+            builtin_ctx: Rc::new(RefCell::new(ObjectNode::new())),
             current_uri: None
         }
     }
@@ -391,22 +395,24 @@ impl Ctx {
         }
         // 从 document 的 root_object 查找
         if let Some(document) = self.documents.get(self.current_uri.as_ref().unwrap()) {
-            let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &document.root_object.name);
+            let root_obj = document.root_object.borrow();
+            let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &root_obj.name);
             if is_found {
                 return (obj, false);
             } else {
-                if let Some(member) = document.root_object.members.get(word) && member.member_type == MemberType::Function {
+                if let Some(member) = root_obj.members.get(word) && member.member_type == MemberType::Function {
                    return (None, true);
                 }
             }
         }
 
         // 从 builtin_ctx 查找
-        let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &self.builtin_ctx.name);
+        let builtin = self.builtin_ctx.borrow();
+        let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &builtin.name);
         if is_found {
             return (obj, false);
         } else {
-            if let Some(member) = self.builtin_ctx.members.get(word) && member.member_type == MemberType::Function {
+            if let Some(member) = builtin.members.get(word) && member.member_type == MemberType::Function {
                 return (None, true);
             }
         }
@@ -422,21 +428,28 @@ impl Ctx {
         }
 
         // 从 document 的 root_object 查找
+        log::info!("get from opened file");
         if let Some(document) = self.documents.get(file_uri) {
-            if let Some(results) = self.get_members_from_object(object_path, prefix, &document.root_object) {
+            let root_obj = document.root_object.borrow();
+            if let Some(results) = self.get_members_from_object(object_path, prefix, &*root_obj) {
                 return results;
             }
         }
 
         // 从 builtin_ctx 查找
         log::info!("get from builtin");
-        if let Some(results) = self.get_members_from_object(object_path, prefix, &self.builtin_ctx) {
+        let builtin = self.builtin_ctx.borrow();
+        if let Some(results) = self.get_members_from_object(object_path, prefix, &*builtin) {
+            log::info!("builtin result: {:?}", results);
             return results;
         }
 
         Vec::new()
     }
 
+    fn is_any_func(t: MemberType) -> bool {
+        t == MemberType::Action || t == MemberType::Function || t == MemberType::Native
+    }
     /// 从指定对象中获取成员补全
     fn get_members_from_object(&self, object_path: &str, prefix: &str, root_object: &ObjectNode) -> Option<Vec<ObjectMember>> {
         let parts: Vec<&str> = object_path.split('/').filter(|s| !s.is_empty()).collect();
@@ -447,7 +460,7 @@ impl Ctx {
                 } else {
                     // try to find it in root_object
                     log::info!("finding it in root");
-                    if let Some(member) = root_object.members.get(name) && member.member_type == MemberType::Function {
+                    if let Some(member) = root_object.members.get(name) && Self::is_any_func(member.member_type.clone()) {
                        return self.get_refinements_from_member(member);
                     }
                 }
@@ -472,7 +485,7 @@ impl Ctx {
             if let Some(obj) = obj {
                 let part = word.unwrap();
                 log::info!("finding function in object");
-                if let Some(member) = obj.members.get(part) && member.member_type == MemberType::Function {
+                if let Some(member) = obj.members.get(part) && Self::is_any_func(member.member_type.clone()) {
                     return self.get_refinements_from_member(member);
                 }
             }
@@ -587,8 +600,7 @@ impl Ctx {
         results
     }
 
-    /// Parse an include file and cache its content
-    fn parse_include_file(&mut self, include_path: &Path, base_dir: &Path) -> Option<bool> {
+    fn red_file_to_uri(include_path: &Path, base_dir: &Path) -> (Option<Uri>, PathBuf) {
         // Resolve relative path
         let full_path = if include_path.is_absolute() {
             include_path.to_path_buf()
@@ -598,37 +610,52 @@ impl Ctx {
 
         log::debug!("Attempting to parse include file: {:?}", full_path);
 
-        let file_url = url::Url::from_file_path(&full_path).ok()?;
-        let uri = serde_json::from_str::<lsp_types::Uri>(&format!("\"{}\"", file_url.as_str())).ok()?;
-
-        // Check if already cached or opened
-        if self.include_cache.contains(&uri) || self.documents.contains_key(&uri) {
-            return Some(true);
+        let file_url = url::Url::from_file_path(&full_path).ok();
+        if let Some(url) = file_url {
+            let uri = serde_json::from_str::<lsp_types::Uri>(&format!("\"{}\"", url.as_str())).ok();
+            return (uri, full_path);
         }
+        (None, full_path)
+    }
 
-        // Read and parse the file
-        let content = match fs::read_to_string(&full_path) {
-            Ok(content) => content,
-            Err(e) => {
-                log::warn!("Failed to read include file {:?}: {}", full_path, e);
+    /// Parse an include file and cache its content
+    fn parse_include_file(&mut self, include_path: &Path, base_dir: &Path) -> Option<Uri> {
+        let (uri, full_path) = Self::red_file_to_uri(include_path, base_dir);
+
+        if let Some(uri) = uri {
+            // Check if already cached or opened
+            if self.include_cache.contains_key(&uri) {
+                return Some(uri.clone());
+            }
+            if let Some(doc) = self.documents.get(&uri) {  // opened but not in include cache
+                self.include_cache.insert(uri.clone(), doc.root_object.clone());
+                return Some(uri.clone());
+            }
+
+            // Read and parse the file
+            let content = match fs::read_to_string(&full_path) {
+                Ok(content) => content,
+                Err(e) => {
+                    log::warn!("Failed to read include file {:?}: {}", full_path, e);
+                    return None;
+                }
+            };
+
+            let tree = self.parser.parse(&content, None);
+
+            if tree.is_none() {
+                log::warn!("Failed to parse include file: {:?}", full_path);
                 return None;
             }
-        };
 
-        let tree = self.parser.parse(&content, None);
+            log::debug!("Successfully parsed include file: {:?}", full_path);
 
-        if tree.is_none() {
-            log::warn!("Failed to parse include file: {:?}", full_path);
-            return None;
+            // Create a file URI from the path for collect_identifiers
+            let obj = self.collect_identifiers(&content, &tree, &uri);
+            self.include_cache.insert(uri.clone(), obj);
+            return Some(uri);
         }
-
-        log::debug!("Successfully parsed include file: {:?}", full_path);
-
-        // Create a file URI from the path for collect_identifiers
-        self.collect_identifiers(&content, &tree, &uri);
-
-        self.include_cache.insert(uri);
-        Some(true)
+        None
     }
 
     // Recursive function to collect identifiers from the tree
@@ -702,7 +729,7 @@ impl Ctx {
         None
     }
 
-    pub fn collect_identifiers(&mut self, source_code: &str, tree: &Option<Tree>, file_uri: &Uri) -> ObjectNode {
+    pub fn collect_identifiers(&mut self, source_code: &str, tree: &Option<Tree>, file_uri: &Uri) -> Rc<RefCell<ObjectNode>> {
         if let Some(tree) = tree {
             let mut cursor = tree.walk();
             // Convert Uri to file path
@@ -718,22 +745,30 @@ impl Ctx {
             // 收集对象定义
             self.collect_objects(source_code, &mut cursor, file_uri)
         } else {
-            ObjectNode::new()
+            Rc::new(RefCell::new(ObjectNode::new()))
         }
     }
 
     /// 遍历语法树收集对象（context）定义
-    pub fn collect_objects(&mut self, source_code: &str, cursor: &mut TreeCursor, file_uri: &Uri) -> ObjectNode {
-        let mut obj = ObjectNode::new();    // root context
-        obj.byte_range = (0, source_code.len());
-        let file_path = file_uri.to_string();
-        if cursor.goto_first_child() {
-            let mut scope_stack: Vec<String> = Vec::new();
-            scope_stack.push(file_path.clone());
-            self.parse_object_body(source_code, file_uri, cursor , &mut scope_stack, &mut obj);
+    pub fn collect_objects(&mut self, source_code: &str, cursor: &mut TreeCursor, file_uri: &Uri) -> Rc<RefCell<ObjectNode>> {
+        let obj = if let Some(old_obj) = self.include_cache.get(file_uri) {
+            old_obj.clone()
+        } else {
+            Rc::new(RefCell::new(ObjectNode::new()))
+        };
+        {
+            let mut obj_borrow = obj.borrow_mut();
+            obj_borrow.members.clear();
+            obj_borrow.byte_range = (0, source_code.len());
+            let file_path = file_uri.to_string();
+            if cursor.goto_first_child() {
+                let mut scope_stack: Vec<String> = Vec::new();
+                scope_stack.push(file_path.clone());
+                self.parse_object_body(source_code, file_uri, cursor , &mut scope_stack, &mut *obj_borrow);
+            }
+            obj_borrow.file_path = file_path.clone();
+            obj_borrow.name = file_path;
         }
-        obj.file_path = file_path.clone();
-        obj.name = file_path;
         obj
     }
 
@@ -763,41 +798,89 @@ impl Ctx {
         let kind_function = self.get_kind_id("function");
         let kind_does = self.get_kind_id("does");
         let kind_context = self.get_kind_id("context");
+        let kind_issue = self.get_kind_id("issue");
+        let kind_file = self.get_kind_id("file");
 
         loop {
             let node = cursor.node();
             let kind_id = node.kind_id();
             let mut member_type = MemberType::Value;
             let mut member_name = String::new();
-log::info!("node kind: {}", node.kind());
+            let mut spec_content = None;
+
             if kind_id == kind_set_word {
                 let name = get_node_text(source_code, &node).unwrap();
                 member_name = name.trim().trim_end_matches(':').to_string();
+                if let Some(issue_node) = node.next_sibling() && issue_node.kind_id() == kind_issue &&
+                    get_node_text(source_code, &issue_node).unwrap_or("") == "#include" &&
+                    let Some(filepath) = issue_node.next_sibling() && filepath.kind_id() == kind_file &&
+                    let Some(include_path) = Self::extract_include_path(source_code, &filepath) {
+                    let base_path = Url::parse(uri.as_str())
+                        .ok()
+                        .and_then(|url| url.to_file_path().ok());
+                    let base_dir = base_path.as_ref().and_then(|p| p.parent()).unwrap_or(Path::new("/"));
+                    let (include_uri, _) = Self::red_file_to_uri(&include_path, base_dir);
+                    scope_stack.push(member_name.clone());
+                    let include_obj = if let Some(include_uri) = include_uri {
+                        self.include_cache.get(&include_uri).cloned()
+                    } else {None};
+                    self.object_graph.add_object(&member_name, scope_stack.join("/"),
+                        ObjectNode {
+                            name: member_name.clone(),
+                            scope_path: scope_stack.join("/"),
+                            byte_range: (node.start_byte(), filepath.end_byte()),
+                            file_path: uri.to_string(),
+                            include_obj,
+                            ..Default::default()
+                        });
+                    member_type = MemberType::Object;
+                    scope_stack.pop();
+                    cursor.goto_next_sibling();
+                    cursor.goto_next_sibling();
+                }
+
             } else if kind_id == kind_make {
                 member_name = Self::extract_member_name(source_code, &node);
-                log::info!("make {}", member_name);
+
                 if let Some(spec) = node.next_sibling() && (spec.kind_id() == kind_word || spec.kind_id() == kind_path) {
                     let text = get_node_text(source_code, &spec).unwrap();
-                    log::info!("make spec: {} {}", spec.kind(), text);
-                    if let Some(blk) = spec.next_sibling() && blk.kind_id() == kind_block && text == "object!" {
-                        let mut obj = ObjectNode::new();
-                        obj.byte_range = (node.start_byte(), blk.end_byte());
-                        obj.file_path = uri.to_string();
-                        scope_stack.push(member_name.clone());
-                        let mut body_cursor = blk.walk();
-                        if body_cursor.goto_first_child() {
-                            self.parse_object_body(source_code, uri, &mut body_cursor, scope_stack, &mut obj);
+                    if let Some(blk) = spec.next_sibling() && blk.kind_id() == kind_block {
+                        if self.object_graph.name_to_scopes.contains_key(text) || text == "object!" {
+                            let mut obj = ObjectNode::new();
+                            obj.byte_range = (node.start_byte(), blk.end_byte());
+                            obj.file_path = uri.to_string();
+                            scope_stack.push(member_name.clone());
+                            let mut body_cursor = blk.walk();
+                            if body_cursor.goto_first_child() {
+                                self.parse_object_body(source_code, uri, &mut body_cursor, scope_stack, &mut obj);
+                            }
+                            self.object_graph.add_object(&member_name, scope_stack.join("/"), obj);
+                            member_type = MemberType::Object;
+                            scope_stack.pop();
+                        } else {
+                            match text {
+                                "function!" => member_type = MemberType::Function,
+                                "native!" => member_type = MemberType::Native,
+                                "action!" => member_type = MemberType::Action,
+                                "routine!" => member_type = MemberType::Routine,
+                                _ => member_type = MemberType::Value,
+                            }
+                            if member_type != MemberType::Value {
+                                spec_content = get_node_text(source_code, &blk).map(|s| s.trim().trim_start_matches("[").trim_end_matches("]").to_string());
+                            }
                         }
-                        self.object_graph.add_object(&member_name, scope_stack.join("/"), obj);
-                        member_type = MemberType::Object;
-                        scope_stack.pop();
                         cursor.goto_next_sibling();
                         cursor.goto_next_sibling();
                     }
                 }
             } else if kind_id == kind_function || kind_id == kind_does {
                 member_name = Self::extract_member_name(source_code, &node);
-                member_type = MemberType::Function
+                member_type = MemberType::Function;
+                if let Some(spec_node) = node.child_by_field_name("spec") {
+                    if spec_node.kind() == "block" {
+                        spec_content = get_node_text(source_code, &spec_node).map(|s| s.trim().trim_start_matches("[").trim_end_matches("]").to_string());
+                    }
+                }
             } else if kind_id == kind_context {
                 let mut obj = ObjectNode::new();
                 obj.byte_range = (node.start_byte(), node.end_byte());
@@ -809,32 +892,33 @@ log::info!("node kind: {}", node.kind());
                 if let Some(body_node) = node.child_by_field_name("body") {
                     let mut body_cursor = body_node.walk();
                     if body_cursor.goto_first_child() {
-                        log::info!(">>>>> body");
                         self.parse_object_body(source_code, uri, &mut body_cursor, scope_stack, &mut obj);
                     }
                 }
-                log::info!("scope_stack: {:?}", scope_stack);
                 self.object_graph.add_object(&member_name, scope_stack.join("/"), obj);
                 member_type = MemberType::Object;
                 scope_stack.pop();
+            } else if kind_id == kind_issue && get_node_text(source_code, &node).unwrap_or("") == "#include" &&
+                let Some(file_node) = node.next_sibling() && file_node.kind_id() == kind_file &&
+                let Some(include_path) = Self::extract_include_path(source_code, &file_node) {
+                // add file content into current context
+                let base_path = Url::parse(uri.as_str())
+                    .ok()
+                    .and_then(|url| url.to_file_path().ok());
+                let base_dir = base_path.as_ref().and_then(|p| p.parent()).unwrap_or(Path::new("/"));
+                let (include_uri, _) = Self::red_file_to_uri(&include_path, base_dir);
+                if let Some(include_uri) = include_uri {
+                     if let Some(obj) = self.include_cache.get(&include_uri) {
+                         for (key, value) in obj.borrow().members.iter() {
+                             scope.members.insert(key.clone(), value.clone());
+                         }
+                     }
+                 }
+                 cursor.goto_next_sibling();
             }
 
             if !member_name.is_empty() {
                 let name = CompactString::from(&member_name);
-                // 如果是函数，提取 spec 内容
-                let spec_content = if member_type == MemberType::Function {
-                    if let Some(spec_node) = node.child_by_field_name("spec") {
-                        if spec_node.kind() == "block" {
-                            get_node_text(source_code, &spec_node).map(|s| s.trim().trim_start_matches("[").trim_end_matches("]").to_string())
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
                 scope.members.insert(
                     member_name,
                     ObjectMember {name, member_type, spec_content}
@@ -990,14 +1074,17 @@ log::info!("node kind: {}", node.kind());
 
             if let Some(obj) = obj {
                 let mut ctx = obj;
-                tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedCtx as u32, 0));
+                //tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedCtx as u32, 0));
                 let mut check = true;
                 for (part_node, part) in path_parts.iter() {
                     let mut token_type = TokenType::RedVariable;
                     if check && let Some(member) = ctx.members.get(part) {
                         match member.member_type {
                             MemberType::Function => token_type = TokenType::RedFunction,
-                            MemberType::Object => token_type = TokenType::RedCtx,
+                            MemberType::Object => token_type = TokenType::RedVariable,
+                            MemberType::Native => token_type = TokenType::RedKeyword,
+                            MemberType::Action => token_type = TokenType::RedKeyword,
+                            MemberType::Routine => token_type = TokenType::RedKeyword,
                             MemberType::Value => token_type = TokenType::RedVariable,
                         }
                     }

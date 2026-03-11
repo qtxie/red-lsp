@@ -106,6 +106,7 @@ impl RedLanguageServer {
                         token_types: vec![
                             SemanticTokenType::FUNCTION,
                             SemanticTokenType::VARIABLE,
+                            SemanticTokenType::KEYWORD,
                             SemanticTokenType::NAMESPACE,
                         ],
                         token_modifiers: vec![],
@@ -434,7 +435,7 @@ impl RedLanguageServer {
         self.ctx.current_uri = Some(uri.clone());
 
         // 如果是 include 缓存中的文件，不从 object_graph 中移除（因为可能被多个文件引用）
-        if !self.ctx.include_cache.contains(uri) {
+        if !self.ctx.include_cache.contains_key(uri) {
             // 从 object_graph 中移除该文件的对象
             let file_path = uri.to_string();
             self.ctx.object_graph.remove_objects_by_file(&file_path);
@@ -659,8 +660,9 @@ fn get_object_completion_items(members: &Vec<analyzer::ObjectMember>) -> Vec<lsp
         .map(|member| {
             let kind = match member.member_type {
                 analyzer::MemberType::Function => lsp_types::CompletionItemKind::FUNCTION,
-                analyzer::MemberType::Object => lsp_types::CompletionItemKind::MODULE,
+                analyzer::MemberType::Object => lsp_types::CompletionItemKind::CLASS,
                 analyzer::MemberType::Value => lsp_types::CompletionItemKind::VARIABLE,
+                _ => lsp_types::CompletionItemKind::VARIABLE,
             };
 
             lsp_types::CompletionItem {

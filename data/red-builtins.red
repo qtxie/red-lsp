@@ -1,78 +1,78 @@
-?: function [
+?: make function! [
     {Displays information about functions, values, objects, and datatypes.}
     'word [any-type!]
 ]
-??: function [
+??: make function! [
     "Prints a word and the value it refers to (molded)"
     'value [word! path!]
 ]
-a-an: function [
+a-an: make function! [
     {Returns the appropriate variant of a or an (simple, vs 100% grammatically correct)}
     str [string!]
     /pre "Prepend to str"
     /local tmp
 ]
-about: function [
+about: make function! [
     "Print Red version information"
     /debug {Print full Red and OS version information suitable for submitting issues}
     /cc "Also copy to clipboard"
     /local git plt txt
 ]
-absolute: action [
+absolute: make action! [
     "Returns the non-negative value"
     value [number! money! char! pair! time! any-point!]
     return: [number! money! char! pair! time! any-point!]
 ]
-acos: function [
+acos: make function! [
     {Returns the trigonometric arccosine in radians in range [0,pi]}
     cosine [float!] "in range [-1,1]"
 ]
-action?: function ["Returns true if the value is this type" value [any-type!]]
-add: action [
+action?: make function! ["Returns true if the value is this type" value [any-type!]]
+add: make action! [
     "Returns the sum of the two values"
     value1 [scalar! vector!] "The augend"
     value2 [scalar! vector!] "The addend"
     return: [scalar! vector!] "The sum"
 ]
-alert: function [
+alert: make function! [
     {Displays an alert message in a pop-up modal window}
     msg [string! block!] "Message to display"
 ]
-all: native [
+all: make native! [
     {Evaluates and returns the last value if all are truthy; else NONE}
     conds [block!]
 ]
-all-word?: function ["Returns true if the value is any type of all-word" value [any-type!]]
-also: function [
+all-word?: make function! ["Returns true if the value is any type of all-word" value [any-type!]]
+also: make function! [
     {Returns the first value, but also evaluates the second}
     value1 [any-type!]
     value2 [any-type!]
 ]
-alter: function [
+alter: make function! [
     {If a value is not found in a series, append it; otherwise, remove it. Returns true if added}
     series [series!]
     value
 ]
-and~: action [
+and~: make action! [
     "Returns the first value ANDed with the second"
     value1 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]
     value2 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]
     return: [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]
 ]
-any: native [
+any: make native! [
     {Evaluates and returns the first truthy value, if any; else NONE}
     conds [block!]
 ]
-any-block?: function [{Returns true if the value is any type of any-block} value [any-type!]]
-any-function?: function [{Returns true if the value is any type of any-function} value [any-type!]]
-any-interesting?: function [{Returns true if the value is any type of any-function} value [any-type!]]
-any-list?: function ["Returns true if the value is any type of any-list" value [any-type!]]
-any-object?: function [{Returns true if the value is any type of any-object} value [any-type!]]
-any-path?: function ["Returns true if the value is any type of any-path" value [any-type!]]
-any-point?: function [{Returns true if the value is any type of any-point} value [any-type!]]
-any-string?: function [{Returns true if the value is any type of any-string} value [any-type!]]
-any-word?: function ["Returns true if the value is any type of any-word" value [any-type!]]
-append: action [
+any-block?: make function! [{Returns true if the value is any type of any-block} value [any-type!]]
+any-function?: make function! [{Returns true if the value is any type of any-function} value [any-type!]]
+any-interesting?: make function! [{Returns true if the value is any type of any-function} value [any-type!]]
+any-list?: make function! ["Returns true if the value is any type of any-list" value [any-type!]]
+any-object?: make function! [{Returns true if the value is any type of any-object} value [any-type!]]
+any-path?: make function! ["Returns true if the value is any type of any-path" value [any-type!]]
+any-point?: make function! [{Returns true if the value is any type of any-point} value [any-type!]]
+any-string?: make function! [{Returns true if the value is any type of any-string} value [any-type!]]
+any-word?: make function! ["Returns true if the value is any type of any-word" value [any-type!]]
+append: make action! [
     {Inserts value(s) at series tail; returns series head}
     series [series! bitset! port!]
     value [any-type!]
@@ -83,90 +83,90 @@ append: action [
     count [integer!]
     return: [series! port! bitset!]
 ]
-apply: native [
+apply: make native! [
     "Apply a function to a reduced block of arguments"
     func [word! path! any-function!] "Function to apply, with eventual refinements"
     args [block!] "Block of args, reduced first"
     /all {Provide every argument in the function spec, in order, tail-completed with false/none.}
     /safer {Forces single refinement arguments, skip them when inactive instead of evaluating}
 ]
-arccosine: native [
+arccosine: make native! [
     {Returns the trigonometric arccosine in degrees in range [0,180]}
     cosine [float! integer!] "in range [-1,1]"
     /radians "DEPRECATED: use `acos` native instead"
     return: [float!]
 ]
-arcsine: native [
+arcsine: make native! [
     {Returns the trigonometric arcsine in degrees in range [-90,90]}
     sine [float! integer!] "in range [-1,1]"
     /radians "DEPRECATED: use `asin` native instead"
     return: [float!]
 ]
-arctangent: native [
+arctangent: make native! [
     {Returns the trigonometric arctangent in degrees in range [-90,90]}
     tangent [float! integer!] "in range [-inf,+inf]"
     /radians "DEPRECATED: use `atan` native instead"
     return: [float!]
 ]
-arctangent2: native [
+arctangent2: make native! [
     {Returns the smallest angle between the vectors (1,0) and (x,y) in degrees (-180,180]}
     y [float! integer!]
     x [float! integer!]
     /radians "DEPRECATED: use `atan2` native instead"
     return: [float!]
 ]
-as: native [
+as: make native! [
     {Coerce a series into a compatible datatype without copying it}
     type [datatype! block! paren! any-path! any-string!] "The datatype or example value"
     spec [block! paren! any-path! any-string!] "The series to coerce"
 ]
-as-color: routine [
+as-color: make routine! [
     "Combine R, G and B values into a tuple"
     r [integer!]
     g [integer!]
     b [integer!]
 ]
-as-ipv4: routine [
+as-ipv4: make routine! [
     "Combine a, b, c and d values into a tuple"
     a [integer!]
     b [integer!]
     c [integer!]
     d [integer!]
 ]
-as-money: native [
+as-money: make native! [
     {Combine currency code and amount into a monetary value}
     currency [word!]
     amount [integer! float!]
     return: [money!]
 ]
-as-pair: native [
+as-pair: make native! [
     "Combine X and Y values into a pair"
     x [integer! float!]
     y [integer! float!]
 ]
-as-point2D: native [
+as-point2D: make native! [
     "Combine X and Y values into a 2D point"
     x [integer! float!]
     y [integer! float!]
 ]
-as-point3D: native [
+as-point3D: make native! [
     "Combine X, Y and Z values into a 3D point"
     x [integer! float!]
     y [integer! float!]
     z [integer! float!]
 ]
-as-rgba: routine [
+as-rgba: make routine! [
     {Combine R, G, B and A color components into a tuple}
     r [integer!]
     g [integer!]
     b [integer!]
     a [integer!]
 ]
-asin: function [
+asin: make function! [
     {Returns the trigonometric arcsine in radians in range [-pi/2,pi/2])}
     sine [float!] "in range [-1,1]"
 ]
-ask: function [
+ask: make function! [
     "Prompt the user for input"
     question [string!]
     /hide
@@ -175,58 +175,58 @@ ask: function [
     return: [string!]
     /local t? line
 ]
-at: action [
+at: make action! [
     "Returns a series at a given index"
     series [series! port!]
     index [integer! pair!]
     return: [series! port!]
 ]
-atan: function [
+atan: make function! [
     {Returns the trigonometric arctangent in radians in range [-pi/2,+pi/2]}
     tangent [float!] "in range [-inf,+inf]"
 ]
-atan2: function [
+atan2: make function! [
     {Returns the smallest angle between the vectors (1,0) and (x,y) in range (-pi,pi]}
     y [float! integer!]
     x [float! integer!]
     return: [float!]
 ]
-attempt: function [
+attempt: make function! [
     {Tries to evaluate a block and returns result or NONE on error}
     code [block!]
     /safer "Capture all possible errors and exceptions"
     /local all result
 ]
-average: function [
+average: make function! [
     "Returns the average of all values in a block"
     block [block! vector! paren! hash!]
 ]
-back: action [
+back: make action! [
     "Returns a series at the previous index"
     series [series! port!]
     return: [series! port!]
 ]
-binary?: function ["Returns true if the value is this type" value [any-type!]]
-bind: native [
+binary?: make function! ["Returns true if the value is this type" value [any-type!]]
+bind: make native! [
     "Bind words to a context; returns rebound words"
     word [block! any-word!]
     context [any-word! any-object! function!]
     /copy "Deep copy blocks before binding"
     return: [block! any-word!]
 ]
-bitset?: function ["Returns true if the value is this type" value [any-type!]]
-block?: function ["Returns true if the value is this type" value [any-type!]]
-body-of: function [{Returns the body of a value that supports reflection} value]
-break: native [
+bitset?: make function! ["Returns true if the value is this type" value [any-type!]]
+block?: make function! ["Returns true if the value is this type" value [any-type!]]
+body-of: make function! [{Returns the body of a value that supports reflection} value]
+break: make native! [
     {Breaks out of a loop, while, until, repeat, foreach, etc}
     /return "Forces the loop function to return a value"
     value [any-type!]
 ]
-browse: native [
+browse: make native! [
     {Opens the URL in a web browser or the file in the associated application}
     url [url! file!]
 ]
-call: native [
+call: make native! [
     "Executes a shell command to run another process"
     cmd [string! file!] "A shell command or an executable file"
     /wait "Runs command and waits for exit"
@@ -238,7 +238,7 @@ call: native [
     /error err [string! file! binary!] "Redirects stderr to err"
     return: [integer!] "0 if success, -1 if error, or a process ID"
 ]
-caret-to-offset: function [
+caret-to-offset: make function! [
     {Given a text position, returns the corresponding coordinate relative to the top-left of the layout box}
     face [object!]
     pos [integer!]
@@ -246,28 +246,28 @@ caret-to-offset: function [
     return: [point2D!]
     /local opt
 ]
-case: native [
+case: make native! [
     {Evaluates the block following the first truthy condition}
     cases [block!] "Block of condition-block pairs"
     /all {Test all conditions, evaluating the block following each truthy condition}
 ]
-catch: native [
+catch: make native! [
     {Catches a throw from a block and returns its value}
     block [block!] "Block to evaluate"
     /name "Catches a named throw"
     word [word! block!] "One or more names"
 ]
-cause-error: function [
+cause-error: make function! [
     {Causes an immediate error throw, with the provided information}
     err-type [word!]
     err-id [word!]
     args [block! string!]
 ]
-cd: function [
+cd: make function! [
     "Changes the active directory path"
     :dir [file! word! path!] {New active directory of relative path to the new one}
 ]
-center-face: function [
+center-face: make function! [
     "Center a face inside its parent"
     face [object!] "Face to center"
     /x "Center horizontally only"
@@ -277,7 +277,7 @@ center-face: function [
     return: [object!] "Returns the centered face"
     /local pos
 ]
-change: action [
+change: make action! [
     {Changes a value in a series and returns the series after the change}
     series [series! port!] "Series at point to change"
     value [any-type!] "The new value"
@@ -287,16 +287,16 @@ change: action [
     /dup "Duplicates the change a specified number of times"
     count [number!]
 ]
-change-dir: function [
+change-dir: make function! [
     "Changes the active directory path"
     dir [file! word! path!] {New active directory of relative path to the new one}
 ]
-char?: function ["Returns true if the value is this type" value [any-type!]]
-charset: function [
+char?: make function! ["Returns true if the value is this type" value [any-type!]]
+charset: make function! [
     "Shortcut for `make bitset!`"
     spec [block! integer! char! string! bitset! binary!]
 ]
-checksum: native [
+checksum: make native! [
     "Computes a checksum, CRC, hash, or HMAC"
     data [binary! string! file!]
     method [word!] {MD5 SHA1 SHA256 SHA384 SHA512 CRC32 TCP ADLER32 hash}
@@ -304,8 +304,8 @@ checksum: native [
     spec [any-string! binary! integer!] {String or binary for MD5/SHA* HMAC key, integer for hash table size}
     return: [integer! binary!]
 ]
-class-of: function ["Returns the class ID of an object" value]
-clean-path: function [
+class-of: make function! ["Returns the class ID of an object" value]
+clean-path: make function! [
     [no-trace]
     {Cleans-up '.' and '..' in path; returns the cleaned path}
     file [file! url! string!]
@@ -313,13 +313,13 @@ clean-path: function [
     /dir "Add a trailing / if missing"
     /local out cnt f not-file? prot
 ]
-clear: action [
+clear: make action! [
     {Removes series values from current index to tail; returns new tail}
     series [series! port! bitset! map! none!]
     return: [series! port! bitset! map! none!]
 ]
-clear-reactions: function ["Removes all reactive relations"]
-clock: function [
+clear-reactions: make function! ["Removes all reactive relations"]
+clock: make function! [
     {Display execution time of code, returning result of it's evaluation}
     code [block!]
     /times n [integer! float!]
@@ -327,29 +327,29 @@ clock: function [
     /local result
     text dt unit
 ]
-close: action [
+close: make action! [
     "Closes a port"
     port [port!]
 ]
-collect: function [
+collect: make function! [
     {Collect in a new block all the values passed to KEEP function from the body block}
     body [block!] "Block to evaluate"
     /into {Insert into a buffer instead (returns position after insert)}
     collected [series!] "The buffer series (modified)"
     /local keep rule pos
 ]
-collect-calls: routine [blk [block!]]
-comment: function ["Consume but don't evaluate the next value" 'value]
-complement: action [
+collect-calls: make routine! [blk [block!]]
+comment: make function! ["Consume but don't evaluate the next value" 'value]
+complement: make action! [
     {Returns the opposite (complementing) value of the input value}
     value [logic! integer! tuple! bitset! typeset! binary!]
     return: [logic! integer! tuple! bitset! typeset! binary!]
 ]
-complement?: native [
+complement?: make native! [
     "Returns TRUE if the bitset is complemented"
     bits [bitset!]
 ]
-compose: native [
+compose: make native! [
     "Returns a copy of a block, evaluating only parens"
     value [block!]
     /deep "Compose nested blocks"
@@ -357,32 +357,32 @@ compose: native [
     /into {Put results in out block, instead of creating a new block}
     out [any-block!] "Target block for results, when /into is used"
 ]
-compress: native [
+compress: make native! [
     "Compresses data"
     data [any-string! binary!]
     method [word!] "zlib deflate gzip"
     return: [binary!]
 ]
-construct: native [
+construct: make native! [
     {Makes a new object from an unevaluated spec; standard logic words are evaluated}
     block [block!]
     /with "Use a prototype object"
     object [object!] "Prototype object"
     /only "Don't evaluate standard logic words"
 ]
-context: function [
+context: make function! [
     "Makes a new object from an evaluated spec"
     spec [block!]
 ]
-context?: native [
+context?: make native! [
     "Returns the context to which a word is bound"
     word [any-word!] "Word to check"
     return: [object! function! none!]
 ]
-continue: native [
+continue: make native! [
     "Throws control back to top of loop"
 ]
-copy: action [
+copy: make action! [
     "Returns a copy of a non-scalar value"
     value [series! any-object! bitset! map!]
     /part "Limit the length of the result"
@@ -392,46 +392,46 @@ copy: action [
     kind [datatype!]
     return: [series! any-object! bitset! map!]
 ]
-cos: function [
+cos: make function! [
     "Returns the trigonometric cosine"
     angle [float!] "Angle in radians"
 ]
-cosine: native [
+cosine: make native! [
     "Returns the trigonometric cosine"
     angle [float! integer!]
     /radians "DEPRECATED: use `cos` native instead"
     return: [float!]
 ]
-count-chars: routine [
+count-chars: make routine! [
     {Count UTF-8 encoded characters between two positions in a binary series}
     start [binary!]
     pos [binary!]
     return: [integer!]
 ]
-create: action [
+create: make action! [
     "Send port a create request"
     port [port! file! url! block!]
 ]
-create-dir: routine ["Create the given directory" path [file!]]
-datatype?: function ["Returns true if the value is this type" value [any-type!]]
-date?: function ["Returns true if the value is this type" value [any-type!]]
-debase: native [
+create-dir: make routine! ["Create the given directory" path [file!]]
+datatype?: make function! ["Returns true if the value is this type" value [any-type!]]
+date?: make function! ["Returns true if the value is this type" value [any-type!]]
+debase: make native! [
     {Decodes binary-coded string (BASE-64 default) to binary value}
     value [string!] "The string to decode"
     /base "Binary base to use"
     base-value [integer!] "The base to convert from: 64, 58, 16, or 2"
 ]
-debug: function [
+debug: make function! [
     {Runs argument code through an interactive debugger}
     code [any-type!] "Code to debug"
     /later {Enters the interactive debugger later, on reading @stop value}
 ]
-debug-info?: function ["Internal use only" face [object!] return: [logic!]]
-decode-url: function [
+debug-info?: make function! ["Internal use only" face [object!] return: [logic!]]
+decode-url: make function! [
     {Decode a URL into an object containing its constituent parts}
     url [url! string!]
 ]
-decompress: native [
+decompress: make native! [
     "Decompresses data"
     data [binary!]
     method [word!] "zlib deflate gzip"
@@ -439,18 +439,18 @@ decompress: native [
     sz [integer!] "Uncompressed data size; must not be negative"
     return: [binary!]
 ]
-deep-reactor: function [spec [block!]]
+deep-reactor: make function! [spec [block!]]
 
-dehex: native [
+dehex: make native! [
     "Converts URL-style hex encoded (%xx) strings"
     value [any-string!]
     return: [string!] "Always return a string"
 ]
-delete: action [
+delete: make action! [
     "Deletes the specified file or empty folder"
     file [file! port!]
 ]
-difference: native [
+difference: make native! [
     "Returns the special difference of two data sets"
     set1 [block! hash! string! bitset! typeset! date!]
     set2 [block! hash! string! bitset! typeset! date!]
@@ -459,26 +459,26 @@ difference: native [
     size [integer!]
     return: [block! hash! string! bitset! typeset! time!]
 ]
-dir: function [{Display a directory listing, for the current dir if none is given} 'dir [any-type!]]
-dir?: function [{Returns TRUE if the value looks like a directory spec} file [file! url!]]
-dirize: function [
+dir: make function! [{Display a directory listing, for the current dir if none is given} 'dir [any-type!]]
+dir?: make function! [{Returns TRUE if the value looks like a directory spec} file [file! url!]]
+dirize: make function! [
     {Returns a copy of the path turned into a directory}
     path [file! string! url!]
 ]
-distance?: function [
+distance?: make function! [
     {Returns the distance between 2 points or face centers}
     A [object! planar!] "First face or point"
     B [object! planar!] "Second face or point"
     return: [float!] "Distance between them"
     /local d
 ]
-divide: action [
+divide: make action! [
     "Returns the quotient of two values"
     value1 [number! money! char! pair! tuple! vector! time! any-point!] "The dividend (numerator)"
     value2 [number! money! char! pair! tuple! vector! time! any-point!] "The divisor (denominator)"
     return: [number! money! char! pair! tuple! vector! time! any-point!] "The quotient"
 ]
-do: native [
+do: make native! [
     {Evaluates a value, returning the last evaluation result}
     value [any-type!]
     /expand "Expand directives before evaluation"
@@ -496,97 +496,97 @@ do: native [
         frame [pair!]
     ]]
 ]
-do-actor: function ["Internal Use Only" face [object!] event [event! none!] type [word!] /local result
+do-actor: make function! ["Internal Use Only" face [object!] event [event! none!] type [word!] /local result
 act name]
-do-events: function [
+do-events: make function! [
     {Launch the event loop, blocks until all windows are closed}
     /no-wait "Process an event in the queue and returns at once"
     return: [logic! word!] "Returned value from last event"
     /local result screen win
 ]
-do-file: function ["Internal Use Only" file [file! url!] callback [function! none!]
+do-file: make function! ["Internal Use Only" file [file! url!] callback [function! none!]
 /local ws saved src found? code header? header new-path list c done?]
-do-no-sync: function [
+do-no-sync: make function! [
     "Evaluate CODE with view/auto-sync?: off"
     code [block!]
     /local r e old
 ]
-do-safe: function ["Internal Use Only" code [block!] /local result error]
-do-thru: function [
+do-safe: make function! ["Internal Use Only" code [block!] /local result error]
+do-thru: make function! [
     {Evaluates a remote Red script through local disk cache}
     url [url!] "Remote file address"
     /update "Force a cache update"
 ]
-does: native [
+does: make native! [
     {Defines a function with no arguments or local variables}
     body [block!]
 ]
-draw: function [
+draw: make function! [
     "Draws scalable vector graphics to an image"
     image [image! pair!] "Image or size for an image"
     cmd [block!] "Draw commands"
     /transparent "Make a transparent image, if pair! spec is used"
     return: [image!]
 ]
-dt: function [
+dt: make function! [
     "Returns the time required to evaluate a block"
     body [block!]
     return: [time!]
     /local t0
 ]
-dump-face: function [
+dump-face: make function! [
     {Display debugging info about a face and its children}
     face [object!] "Face to analyze"
     /local depth f
 ]
-dump-reactions: function [
+dump-reactions: make function! [
     {Outputs all the current reactive relations for debugging purpose}
     /local limit count obj field reaction target list
 ]
-either: native [
+either: make native! [
     {If conditional expression is truthy, evaluate the first branch; else evaluate the alternative}
     cond [any-type!]
     true-blk [block!]
     false-blk [block!]
 ]
-ellipsize-at: function [
+ellipsize-at: make function! [
     {Truncate and add ellipsis if str is longer than len}
     str [string!] "(modified)"
     len [integer!] "Max length"
 ]
-email?: function ["Returns true if the value is this type" value [any-type!]]
-empty?: function [
+email?: make function! ["Returns true if the value is this type" value [any-type!]]
+empty?: make function! [
     {Returns true if data is a series at its tail or an empty map}
     data [series! none! map!]
     return: [logic!]
 ]
-enbase: native [
+enbase: make native! [
     {Encodes a string into a binary-coded string (BASE-64 default)}
     value [binary! string!] "If string, will be UTF8 encoded"
     /base "Binary base to use"
     base-value [integer!] "The base to convert from: 64, 58, 16, or 2"
 ]
-encode-url: function [url-obj [object!] "What you'd get from decode-url"
+encode-url: make function! [url-obj [object!] "What you'd get from decode-url"
 /local result]
-enhex: native [
+enhex: make native! [
     "Encode URL-style hex encoded (%xx) strings"
     value [any-string!]
     return: [string!] "Always return a string"
 ]
-equal?: native [
+equal?: make native! [
     "Returns TRUE if two values are equal"
     value1 [any-type!]
     value2 [any-type!]
 ]
-error?: function ["Returns true if the value is this type" value [any-type!]]
-eval-set-path: function ["Internal Use Only" value1]
-even?: action [
+error?: make function! ["Returns true if the value is this type" value [any-type!]]
+eval-set-path: make function! ["Internal Use Only" value1]
+even?: make action! [
     {Returns true if the number is evenly divisible by 2}
     number [number! money! char! time!]
     return: [logic!]
 ]
-event?: routine ["Returns true if the value is this type" value [any-type!] return: [logic!]]
-exclude: native [
+event?: make routine! ["Returns true if the value is this type" value [any-type!] return: [logic!]]
+exclude: make native! [
     {Returns the first data set less the second data set}
     set1 [block! hash! string! bitset! typeset!]
     set2 [block! hash! string! bitset! typeset!]
@@ -595,36 +595,36 @@ exclude: native [
     size [integer!]
     return: [block! hash! string! bitset! typeset!]
 ]
-exists-thru?: function [
+exists-thru?: make function! [
     {Returns true if the remote file is present in the local disk cache}
     url [url! file!] "Remote file address"
 ]
-exists?: routine ["Returns TRUE if the file exists" path [file!] return: [logic!]]
-exit: native [
+exists?: make routine! ["Returns TRUE if the file exists" path [file!] return: [logic!]]
+exit: make native! [
     "Exits a function, returning no value"
 ]
-exp: native [
+exp: make native! [
     {Raises E (the base of natural logarithm) to the power specified}
     value [float! integer! percent!]
     return: [float!]
 ]
-expand: function [
+expand: make function! [
     {Preprocess the argument block and display the output (console only)}
     blk [block!] "Block to expand"
 ]
-expand-directives: function [
+expand-directives: make function! [
     {Invokes the preprocessor on argument list, modifying and returning it}
     code [block! paren!] "List of Red values to preprocess"
     /clean "Clear all previously created macros and words"
     /local job saved
 ]
-extend: native [
+extend: make native! [
     {Extend an object or map value with list of key and value pairs}
     obj [object! map!]
     spec [block! hash! map!]
     /case "Use case-sensitive comparison"
 ]
-extract: function [
+extract: make function! [
     {Extracts a value from a series at regular intervals}
     series [series!]
     width [integer!] "Size of each entry (the skip)"
@@ -633,7 +633,7 @@ extract: function [
     /into {Provide an output series instead of creating a new one}
     output [series!] "Output series"
 ]
-extract-boot-args: function [
+extract-boot-args: make function! [
     {Process command-line arguments and store values in system/options (internal usage)}
     /local args at-arg2 ws split-mode arg-end s' e' arg2-update s e
 ]
@@ -1171,19 +1171,19 @@ face: make object! [
     draw: none
 ]
 
-face?: function [
+face?: make function! [
     "Returns TRUE if the value is a face! object"
     value "Value to test"
     return: [logic!]
 ]
-fetch-help: function [
+fetch-help: make function! [
     {Returns information about functions, values, objects, and datatypes.}
     'word [any-type!] "Omit the word arg for HELP usage."
     /local ref-given? value
 ]
-fifth: function ["Returns the fifth value in a series" s [series! tuple! date!]]
-file?: function ["Returns true if the value is this type" value [any-type!]]
-find: action [
+fifth: make function! ["Returns the fifth value in a series" s [series! tuple! date!]]
+file?: make function! ["Returns true if the value is this type" value [any-type!]]
+find: make action! [
     {Returns the series where a value is found, or NONE}
     series [series! bitset! typeset! port! map! none!]
     value [any-type!] {Typesets and datatypes can be used to search by datatype}
@@ -1202,31 +1202,31 @@ find: action [
     /tail {Return the tail of the match found, rather than the head}
     /match "Match at current index only"
 ]
-find-flag?: routine [
+find-flag?: make routine! [
     "Checks a flag in a face object"
     facet [any-type!]
     flag [word!]
 ]
-first: function ["Returns the first value in a series" s [series! tuple! pair! any-point! date! time!]]
-flip-exe-flag: function [
+first: make function! ["Returns the first value in a series" s [series! tuple! pair! any-point! date! time!]]
+flip-exe-flag: make function! [
     {Flip the sub-system for the red.exe between console and GUI modes (Windows only)}
     path [file!] "Path to the red.exe"
     /local file buffer flag
 ]
-float?: function ["Returns true if the value is this type" value [any-type!]]
+float?: make function! ["Returns true if the value is this type" value [any-type!]]
 
-forall: native [
+forall: make native! [
     "Evaluates body for all values in a series"
     'word [word!] "Word referring to series to iterate over"
     body [block!]
 ]
-foreach: native [
+foreach: make native! [
     "Evaluates body for each value in a series"
     'word [word! block!] "Word, or words, to set on each iteration"
     series [series! map!]
     body [block!]
 ]
-foreach-face: function [
+foreach-face: make function! [
     {Evaluates body for each face in a face tree matching the condition}
     face [object!] "Root face of the face tree"
     body [block! function!] {Body block (`face` object) or function `func [face [object!]]`}
@@ -1236,137 +1236,137 @@ foreach-face: function [
     /sub post? "Do not rebind body and spec, internal use only"
     /local exec
 ]
-forever: native [
+forever: make native! [
     "Evaluates body repeatedly forever"
     body [block!]
 ]
-form: action [
+form: make action! [
     {Returns a user-friendly string representation of a value}
     value [any-type!]
     /part "Limit the length of the result"
     limit [integer!]
     return: [string!]
 ]
-fourth: function ["Returns the fourth value in a series" s [series! tuple! date!]]
-frame-index?: routine [return: [integer!]]
-func: native [
+fourth: make function! ["Returns the fourth value in a series" s [series! tuple! date!]]
+frame-index?: make routine! [return: [integer!]]
+func: make native! [
     "Defines a function with a given spec and body"
     spec [block!]
     body [block!]
 ]
-function: native [
+function: make native! [
     {Defines a function, making all set-words found in body, local}
     spec [block!]
     body [block!]
     /extern "Exclude words that follow this refinement"
 ]
-function?: function ["Returns true if the value is this type" value [any-type!]]
-get: native [
+function?: make function! ["Returns true if the value is this type" value [any-type!]]
+get: make native! [
     "Returns the value a word refers to"
     word [any-word! any-path! object!]
     /any {If word has no value, return UNSET rather than causing an error}
     /case "Use case-sensitive comparison (path only)"
     return: [any-type!]
 ]
-get-caret-blink-time: routine [
+get-caret-blink-time: make routine! [
     return: [integer!]
 ]
-get-current-dir: routine [{Returns the platform's current directory for the process}]
-get-current-screen: function [
+get-current-dir: make routine! [{Returns the platform's current directory for the process}]
+get-current-screen: make function! [
     {Returns the screen face of the Display where the mouse cursor is currently located}
     return: [object!] "Screen face"
     /local handle screen
 ]
-get-env: native [
+get-env: make native! [
     {Returns the value of an OS environment variable (for current process)}
     var [any-string! any-word!] "Variable to get"
     return: [string! none!]
 ]
-get-face-pane: function [
+get-face-pane: make function! [
     "Returns the list of a container children or none"
     face [object!] "Face container"
     return: [block! none!]
 ]
-get-focusable: function [
+get-focusable: make function! [
     "Returns the next focusable face from a face tree"
     faces [block!] "Position to start from in a face's pane"
     /back "Search backward"
     /local origin checks flags f pane p
 ]
-get-path?: function ["Returns true if the value is this type" value [any-type!]]
-get-scroller: function [
+get-path?: make function! ["Returns true if the value is this type" value [any-type!]]
+get-scroller: make function! [
     "return a scroller object from a face"
     face [object!]
     orientation [word!]
     return: [object!]
 ]
-get-sys-words: function [test [function!]]
-get-word?: function ["Returns true if the value is this type" value [any-type!]]
-greater-or-equal?: native [
+get-sys-words: make function! [test [function!]]
+get-word?: make function! ["Returns true if the value is this type" value [any-type!]]
+greater-or-equal?: make native! [
     {Returns TRUE if the first value is greater than or equal to the second}
     value1 [any-type!]
     value2 [any-type!]
 ]
-greater?: native [
+greater?: make native! [
     {Returns TRUE if the first value is greater than the second}
     value1 [any-type!]
     value2 [any-type!]
 ]
 
-halt: function ["Stops evaluation and returns to the input prompt"]
-handle?: function ["Returns true if the value is this type" value [any-type!]]
-has: native [
+halt: make function! ["Stops evaluation and returns to the input prompt"]
+handle?: make function! ["Returns true if the value is this type" value [any-type!]]
+has: make native! [
     {Defines a function with local variables, but no arguments}
     vars [block!]
     body [block!]
 ]
-hash?: function ["Returns true if the value is this type" value [any-type!]]
-head: action [
+hash?: make function! ["Returns true if the value is this type" value [any-type!]]
+head: make action! [
     "Returns a series at its first index"
     series [series! port!]
     return: [series! port!]
 ]
-head?: action [
+head?: make action! [
     "Returns true if a series is at its first index"
     series [series! port!]
     return: [logic!]
 ]
-help: function [
+help: make function! [
     {Displays information about functions, values, objects, and datatypes.}
     'word [any-type!]
 ]
 
-help-string: function [
+help-string: make function! [
     {Returns information about functions, values, objects, and datatypes.}
     'word [any-type!] "Omit the word arg for HELP usage."
     /local ref-given? value
 ]
-hex-to-rgb: function [
+hex-to-rgb: make function! [
     {Converts a color in hex format to a tuple value; returns NONE if it fails}
     hex [issue!] "Accepts #rgb, #rrggbb, #rrggbbaa"
     return: [tuple! none!]
     /local str bin
 ]
 
-if: native [
+if: make native! [
     {If conditional expression is truthy, evaluate block; else return NONE}
     cond [any-type!]
     then-blk [block!]
 ]
-image?: function ["Returns true if the value is this type" value [any-type!]]
-immediate?: function [{Returns true if the value is any type of immediate} value [any-type!]]
-in: native [
+image?: make function! ["Returns true if the value is this type" value [any-type!]]
+immediate?: make function! [{Returns true if the value is any type of immediate} value [any-type!]]
+in: make native! [
     {Returns the given word bound to the object's context}
     object [any-object! any-function!]
     word [any-word! refinement!]
 ]
-index?: action [
+index?: make action! [
     {Returns the current index of series relative to the head, or of word in a context}
     series [series! port! any-word!]
     return: [integer!]
 ]
-input: function ["Wait for console user input" return: [string!]]
-insert: action [
+input: make function! ["Wait for console user input" return: [string!]]
+insert: make action! [
     {Inserts value(s) at series index; returns series past the insertion}
     series [series! port! bitset!]
     value [any-type!]
@@ -1377,14 +1377,14 @@ insert: action [
     count [integer!]
     return: [series! port! bitset!]
 ]
-insert-event-func: function [
+insert-event-func: make function! [
     {Adds a function to monitor global events. Returns the function}
     name [word!]
     fun [block! function!] "A function or a function body block"
     /local svh
 ]
-integer?: function ["Returns true if the value is this type" value [any-type!]]
-intersect: native [
+integer?: make function! ["Returns true if the value is this type" value [any-type!]]
+intersect: make native! [
     "Returns the intersection of two data sets"
     set1 [block! hash! string! bitset! typeset!]
     set2 [block! hash! string! bitset! typeset!]
@@ -1393,16 +1393,16 @@ intersect: native [
     size [integer!]
     return: [block! hash! string! bitset! typeset!]
 ]
-is: function []
-issue?: function ["Returns true if the value is this type" value [any-type!]]
-keys-of: function [{Returns the list of words of a value that supports reflection} value]
-last: function ["Returns the last value in a series" s [series! tuple!]]
-last-lf?: routine ["Internal Use Only"]
-last?: function [
+is: make function! []
+issue?: make function! ["Returns true if the value is this type" value [any-type!]]
+keys-of: make function! [{Returns the list of words of a value that supports reflection} value]
+last: make function! ["Returns the last value in a series" s [series! tuple!]]
+last-lf?: make routine! ["Internal Use Only"]
+last?: make function! [
     "Returns TRUE if the series length is 1"
     series [series!]
 ]
-layout: function [
+layout: make function! [
     [no-trace]
     {Return a face with a pane built from a VID description}
     spec [block!] "Dialect block of styles, attributes, and layouts"
@@ -1420,44 +1420,44 @@ layout: function [
     /local axis anti
     background! list reactors local-styles pane-size direction align begin size max-sz current global? below? origin spacing top-left bound cursor opts opt-words re-align sz words reset focal-face svmp pad value anti2 at-offset later? name styling? style styled? st actors face h pos styled w blk vid-align prev mar divide? index dir pad2 image
 ]
-length?: action [
+length?: make action! [
     {Returns the number of values in the series, from the current index to the tail}
     series [series! port! bitset! map! tuple! none!]
     return: [integer! none!]
 ]
-lesser-or-equal?: native [
+lesser-or-equal?: make native! [
     {Returns TRUE if the first value is less than or equal to the second}
     value1 [any-type!]
     value2 [any-type!]
 ]
-lesser?: native [
+lesser?: make native! [
     {Returns TRUE if the first value is less than the second}
     value1 [any-type!]
     value2 [any-type!]
 ]
-link-sub-to-parent: function ["Internal Use Only" face [object!] type [word!] old new
+link-sub-to-parent: make function! ["Internal Use Only" face [object!] type [word!] old new
 /local parent]
-link-tabs-to-parent: function [
+link-tabs-to-parent: make function! [
     "Internal Use Only"
     face [object!]
     /init "Force /show of first tab"
     /local faces visible?
 ]
-list-dir: function [
+list-dir: make function! [
     {Displays a list of files and directories from given folder or current one}
     dir [any-type!] "Folder to list"
     /col "Forces the display in a given number of columns"
     n [integer!] "Number of columns"
     /local list limit max-sz name
 ]
-list-env: native [
+list-env: make native! [
     {Returns a map of OS environment variables (for current process)}
     return: [map!]
 ]
-lit-path?: function ["Returns true if the value is this type" value [any-type!]]
-lit-word?: function ["Returns true if the value is this type" value [any-type!]]
-ll: function [{Display a single column directory listing, for the current dir if none is given} 'dir [any-type!]]
-load: function [
+lit-path?: make function! ["Returns true if the value is this type" value [any-type!]]
+lit-word?: make function! ["Returns true if the value is this type" value [any-type!]]
+ll: make function! [{Display a single column directory listing, for the current dir if none is given} 'dir [any-type!]]
+load: make function! [
     {Returns a value or block of values by reading and evaluating a source}
     source [file! url! string! binary!]
     /header "TBD"
@@ -1473,7 +1473,7 @@ load: function [
     type [word! none!] "E.g. bmp, gif, jpeg, png, redbin, json, csv"
     /local codec suffix name mime pre-load
 ]
-load-csv: function [
+load-csv: make function! [
     {Converts CSV text to a block of rows, where each row is a block of fields.}
     data [string!] "Text CSV data to load"
     /with
@@ -1487,11 +1487,11 @@ load-csv: function [
     qt-char [char!] {Use different character for quotes than double quote (")}
     /local disallowed refs output out-map longest line value record newline quotchars valchars quoted-value char normal-value s e single-value values add-value add-line length index line-rule init parsed? mark key-index key
 ]
-load-json: function [
+load-json: make function! [
     "Convert a JSON string to Red data"
     input [string!] "The JSON string"
 ]
-load-thru: function [
+load-thru: make function! [
     "Loads a remote file through local disk cache"
     url [url!] "Remote file address"
     /update "Force a cache update"
@@ -1499,48 +1499,48 @@ load-thru: function [
     type [word! none!] "E.g. bmp, gif, jpeg, png"
     /local path file
 ]
-log-10: native [
+log-10: make native! [
     "Returns the base-10 logarithm"
     value [float! integer! percent!]
     return: [float!]
 ]
-log-2: native [
+log-2: make native! [
     "Return the base-2 logarithm"
     value [float! integer! percent!]
     return: [float!]
 ]
-log-e: native [
+log-e: make native! [
     {Returns the natural (base-E) logarithm of the given value}
     value [float! integer! percent!]
     return: [float!]
 ]
-logic?: function ["Returns true if the value is this type" value [any-type!]]
-loop: native [
+logic?: make function! ["Returns true if the value is this type" value [any-type!]]
+loop: make native! [
     "Evaluates body a number of times"
     count [integer! float!]
     body [block!]
 ]
-lowercase: native [
+lowercase: make native! [
     "Converts string of characters to lowercase"
     string [any-string! char!] "Value to convert (modified when series)"
     /part "Limits to a given length or position"
     limit [number! any-string!]
     return: [any-string! char!]
 ]
-ls: function [{Display a directory listing, for the current dir if none is given} 'dir [any-type!]]
-make: action [
+ls: make function! [{Display a directory listing, for the current dir if none is given} 'dir [any-type!]]
+make: make action! [
     {Returns a new value made from a spec for that value's type}
     type [any-type!] "The datatype, an example or prototype value"
     spec [any-type!] "The specification of the new value"
     return: [any-type!] "Returns the specified datatype"
 ]
-make-dir: function [
+make-dir: make function! [
     {Creates the specified directory. No error if already exists}
     path [file!]
     /deep "Create subdirectories too"
     /local dirs end created dir
 ]
-make-face: function [
+make-face: make function! [
     {Make a face from a given style name or example face}
     style [word!] "A face type"
     /spec
@@ -1552,20 +1552,20 @@ make-face: function [
     /local
     svv face styles model opts css
 ]
-map?: function ["Returns true if the value is this type" value [any-type!]]
-math: function [
+map?: make function! ["Returns true if the value is this type" value [any-type!]]
+math: make function! [
     "Evaluates expression using math precedence rules"
     datum [block! paren!] "Expression to evaluate"
     /safe "Returns NONE on error"
     /local match
     order infix tally enter recur count operator
 ]
-max: native [
+max: make native! [
     "Returns the greater of the two values"
     value1 [scalar! series!]
     value2 [scalar! series!]
 ]
-metrics?: function [
+metrics?: make function! [
     {Returns a pair! value in the type metrics for the argument face}
     face [object!] "Face object to query"
     type [word!] "Metrics type: 'paddings or 'margins"
@@ -1573,33 +1573,33 @@ metrics?: function [
     axis [word!] "Axis to use for addition: 'x or 'y"
     /local res
 ]
-min: native [
+min: make native! [
     "Returns the lesser of the two values"
     value1 [scalar! series!]
     value2 [scalar! series!]
 ]
-mod: function [
+mod: make function! [
     "Compute a nonnegative remainder of A divided by B"
     a [number! money! char! pair! tuple! vector! time!]
     b [number! money! char! pair! tuple! vector! time!] "Must be nonzero"
     return: [number! money! char! pair! tuple! vector! time!]
     /local r
 ]
-modify: action [
+modify: make action! [
     "Change mode for target aggregate value"
     target [object! series! bitset!]
     field [word!]
     value [any-type!]
     /case "Perform a case-sensitive lookup"
 ]
-modulo: function [
+modulo: make function! [
     {Wrapper for MOD that handles errors like REMAINDER. Negligible values (compared to A and B) are rounded to zero}
     a [number! money! char! pair! tuple! vector! time!]
     b [number! money! char! pair! tuple! vector! time!]
     return: [number! money! char! pair! tuple! vector! time!]
     /local r
 ]
-mold: action [
+mold: make action! [
     {Returns a source format string representation of a value}
     value [any-type!]
     /only "Exclude outer brackets if value is a block"
@@ -1609,8 +1609,8 @@ mold: action [
     limit [integer!]
     return: [string!]
 ]
-money?: function ["Returns true if the value is this type" value [any-type!]]
-move: action [
+money?: make function! ["Returns true if the value is this type" value [any-type!]]
+move: make action! [
     {Moves one or more elements from one series to another position or series}
     origin [series! port!]
     target [series! port!]
@@ -1618,29 +1618,29 @@ move: action [
     length [integer!]
     return: [series! port!]
 ]
-multiply: action [
+multiply: make action! [
     "Returns the product of two values"
     value1 [number! money! char! pair! tuple! vector! time! any-point!] "The multiplicand"
     value2 [number! money! char! pair! tuple! vector! time! any-point!] "The multiplier"
     return: [number! money! char! pair! tuple! vector! time! any-point!] "The product"
 ]
-NaN?: native [
+NaN?: make native! [
     "Returns TRUE if the number is Not-a-Number"
     value [number!]
     return: [logic!]
 ]
-native?: function ["Returns true if the value is this type" value [any-type!]]
-negate: action [
+native?: make function! ["Returns true if the value is this type" value [any-type!]]
+negate: make action! [
     "Returns the opposite (additive inverse) value"
     number [number! money! bitset! pair! time! any-point!]
     return: [number! money! bitset! pair! time! any-point!]
 ]
-negative?: native [
+negative?: make native! [
     "Returns TRUE if the number is negative"
     number [number! money! time!]
     return: [logic!]
 ]
-new-line: native [
+new-line: make native! [
     {Sets or clears the new-line marker within a list series}
     position [any-list!] "Position to change marker (modified)"
     value [logic!] "Set TRUE for newline"
@@ -1649,36 +1649,36 @@ new-line: native [
     size [integer!]
     return: [any-list!]
 ]
-new-line?: native [
+new-line?: make native! [
     {Returns the state of the new-line marker within a list series}
     position [any-list!] "Position to check marker"
     return: [logic!]
 ]
-next: action [
+next: make action! [
     "Returns a series at the next index"
     series [series! port!]
     return: [series! port!]
 ]
-no-react: function [
+no-react: make function! [
     {Evaluates a block with all previously defined reactions disabled}
     body [block!] "Code block to evaluate"
     /local result
 ]
-none?: function ["Returns true if the value is this type" value [any-type!]]
-normalize-dir: function [
+none?: make function! ["Returns true if the value is this type" value [any-type!]]
+normalize-dir: make function! [
     "Returns an absolute directory spec"
     dir [file! word! path!]
 ]
-not: native [
+not: make native! [
     {Returns the logical complement of a value (truthy or falsy)}
     value [any-type!]
 ]
-not-equal?: native [
+not-equal?: make native! [
     "Returns TRUE if two values are not equal"
     value1 [any-type!]
     value2 [any-type!]
 ]
-now: native [
+now: make native! [
     "Returns date and time"
     /year "Returns year only"
     /month "Returns month only"
@@ -1692,38 +1692,38 @@ now: native [
     /utc "Universal time (no zone)"
     return: [date! time! integer!]
 ]
-number?: function ["Returns true if the value is any type of number" value [any-type!]]
-object: function [
+number?: make function! ["Returns true if the value is any type of number" value [any-type!]]
+object: make function! [
     "Makes a new object from an evaluated spec"
     spec [block!]
 ]
-object?: function ["Returns true if the value is this type" value [any-type!]]
-odd?: action [
+object?: make function! ["Returns true if the value is this type" value [any-type!]]
+odd?: make action! [
     {Returns true if the number has a remainder of 1 when divided by 2}
     number [number! money! char! time!]
     return: [logic!]
 ]
-offset-to-caret: function [
+offset-to-caret: make function! [
     {Given a coordinate, returns the corresponding caret position}
     face [object!]
     pt [planar!]
     return: [integer!]
 ]
-offset-to-char: function [
+offset-to-char: make function! [
     {Given a coordinate, returns the corresponding character position}
     face [object!]
     pt [planar!]
     return: [integer!]
 ]
-offset?: function [
+offset?: make function! [
     "Returns the offset between two series positions"
     series1 [series!]
     series2 [series!]
 ]
-on-face-deep-change*: function ["Internal use only" owner word target action new index part state forced?
+on-face-deep-change*: make function! ["Internal use only" owner word target action new index part state forced?
 /local w diff? faces face modal? screen pane]
-op?: function ["Returns true if the value is this type" value [any-type!]]
-open: action [
+op?: make function! ["Returns true if the value is this type" value [any-type!]]
+open: make action! [
     {Opens a port; makes a new port from a specification if necessary}
     port [port! file! url! block!]
     /new "Create new file - if it exists, deletes it"
@@ -1733,25 +1733,25 @@ open: action [
     /allow "Specificies right access attributes"
     access [block!]
 ]
-open?: action [
+open?: make action! [
     "Returns TRUE if port is open"
     port [port!]
 ]
-or~: action [
+or~: make action! [
     "Returns the first value ORed with the second"
     value1 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]
     value2 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]
     return: [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]
 ]
-os-info: routine [{Returns detailed operating system version information}]
-overlap?: function [
+os-info: make routine! [{Returns detailed operating system version information}]
+overlap?: make function! [
     {Return TRUE if the two faces bounding boxes are overlapping}
     A [object!] "First face"
     B [object!] "Second face"
     return: [logic!] "TRUE if overlapping"
     /local A1 B1 A2 B2
 ]
-pad: function [
+pad: make function! [
     "Pad a FORMed value on right side with spaces"
     str "Value to pad, FORM it if not a string"
     n [integer!] "Total size (in characters) of the new string"
@@ -1760,10 +1760,10 @@ pad: function [
     c [char!]
     return: [string!] "Modified input string at head"
 ]
-pair?: function ["Returns true if the value is this type" value [any-type!]]
+pair?: make function! ["Returns true if the value is this type" value [any-type!]]
 
-paren?: function ["Returns true if the value is this type" value [any-type!]]
-parse: native [
+paren?: make function! ["Returns true if the value is this type" value [any-type!]]
+parse: make native! [
     "Process a series using dialected grammar rules"
     input [binary! any-block! any-string!]
     rules [block!]
@@ -1781,7 +1781,7 @@ parse: native [
     ]]
     return: [logic! block!]
 ]
-parse-trace: function [
+parse-trace: make function! [
     {Wrapper for parse/trace using the default event processor}
     input [series!]
     rules [block!]
@@ -1790,39 +1790,39 @@ parse-trace: function [
     limit [integer!]
     return: [logic! block!]
 ]
-path-thru: function [
+path-thru: make function! [
     {Returns the local disk cache path of a remote file}
     url [url!] "Remote file address"
     return: [file!]
     /local so hash file path
 ]
-path?: function ["Returns true if the value is this type" value [any-type!]]
-percent?: function ["Returns true if the value is this type" value [any-type!]]
-pick: action [
+path?: make function! ["Returns true if the value is this type" value [any-type!]]
+percent?: make function! ["Returns true if the value is this type" value [any-type!]]
+pick: make action! [
     "Returns the series value at a given index"
     series [series! port! bitset! pair! any-point! tuple! money! date! time! event!]
     index [scalar! any-string! any-word! block! logic! time!]
     return: [any-type!]
 ]
-pick-stack: routine [
+pick-stack: make routine! [
     idx [integer!]
 ]
-planar?: function ["Returns true if the value is any type of planar" value [any-type!]]
-point2D?: function ["Returns true if the value is this type" value [any-type!]]
-point3D?: function ["Returns true if the value is this type" value [any-type!]]
-poke: action [
+planar?: make function! ["Returns true if the value is any type of planar" value [any-type!]]
+point2D?: make function! ["Returns true if the value is this type" value [any-type!]]
+point3D?: make function! ["Returns true if the value is this type" value [any-type!]]
+poke: make action! [
     {Replaces the series value at a given index, and returns the new value}
     series [series! port! bitset!]
     index [scalar! any-string! any-word! block! logic!]
     value [any-type!]
     return: [series! port! bitset!]
 ]
-positive?: native [
+positive?: make native! [
     "Returns TRUE if the number is positive"
     number [number! money! time!]
     return: [logic!]
 ]
-power: action [
+power: make action! [
     {Returns a number raised to a given power (exponent)}
     number [number!] "Base value"
     exponent [integer! float!] "The power (index) to raise the base value by"
@@ -2260,26 +2260,26 @@ preprocessor: make object! [
         code
     ]
 ]
-prin: native [
+prin: make native! [
     "Outputs a value"
     value [any-type!]
 ]
-print: native [
+print: make native! [
     "Outputs a value followed by a newline"
     value [any-type!]
 ]
-probe: function [
+probe: make function! [
     "Returns a value after printing its molded form"
     value [any-type!]
 ]
-profile: function [
+profile: make function! [
     {Profile the argument code, counting calls and their cumulative duration, then print a report}
     code [any-type!] "Code to profile"
     /by
     cat [word!] "Sort by: 'name, 'count, 'time"
     /local saved rank name cnt duration
 ]
-put: action [
+put: make action! [
     {Replaces the value following a key, and returns the new value}
     series [series! port! map! object!]
     key [scalar! any-string! all-word! binary!]
@@ -2287,28 +2287,28 @@ put: action [
     /case "Perform a case-sensitive search"
     return: [series! port! map! object!]
 ]
-pwd: function [{Displays the active directory path (Print Working Dir)}]
-q: function [
+pwd: make function! [{Displays the active directory path (Print Working Dir)}]
+q: make function! [
     "Stops evaluation and exits the program"
     /return status [integer!] "Return an exit status"
 ]
-query: action [
+query: make action! [
     "Returns information about a file"
     target [file! port!]
 ]
-quit: function [
+quit: make function! [
     "Stops evaluation and exits the program"
     /return status [integer!] "Return an exit status"
 ]
-quit-return: routine [
+quit-return: make routine! [
     {Stops evaluation and exits the program with a given status}
     status [integer!] "Process termination value to return"
 ]
-quote: function [
+quote: make function! [
     "Return but don't evaluate the next value"
     :value [any-type!]
 ]
-random: action [
+random: make action! [
     {Returns a random value of the same datatype; or shuffles series}
     value "Maximum value of result (modified when series)"
     /seed "Restart or randomize"
@@ -2316,7 +2316,7 @@ random: action [
     /only "Pick a random value from a series"
     return: [any-type!]
 ]
-react: function [
+react: make function! [
     {Defines a new reactive relation between two or more objects}
     reaction [block! function!] "Reactive relation"
     /link "Link objects together using a reactive relation"
@@ -2329,7 +2329,7 @@ react: function [
     return: [block! function! none!] {The reactive relation or NONE if no relation was processed}
     /local objs found? rule item pos obj
 ]
-react?: function [
+react?: make function! [
     {Returns a reactive relation if an object's field is a reactive source}
     reactor [object!] "Object to check"
     field [word!] "Field to check"
@@ -2337,9 +2337,9 @@ react?: function [
     return: [block! function! word! none!] "Returns reaction, type or NONE"
     /local pos
 ]
-reactor: function [spec [block!]]
+reactor: make function! [spec [block!]]
 
-read: action [
+read: make action! [
     "Reads from a file, URL, or other port"
     source [file! url! port!]
     /part {Partial read a given number of units (source relative)}
@@ -2352,18 +2352,18 @@ read: action [
     /as {Read with the specified encoding, default is 'UTF-8}
     encoding [word!]
 ]
-read-clipboard: routine [
+read-clipboard: make routine! [
     "Return the contents of the system clipboard"
     return: [any-type!] {false on failure, none if empty, otherwise: string!, block! of files!, or an image!}
 ]
-read-thru: function [
+read-thru: make function! [
     "Reads a remote file through local disk cache"
     url [url!] "Remote file address"
     /update "Force a cache update"
     /binary "Use binary mode"
     /local path data
 ]
-recycle: native [
+recycle: make native! [
     {Recycles unused memory and returns memory amount still in use}
     /on "Turns on garbage collector; returns nothing"
     /off "Turns off garbage collector; returns nothing"
@@ -2371,49 +2371,49 @@ recycle: native [
     return: [integer! unset!]
 ]
 
-red-complete-input: function [
+red-complete-input: make function! [
     str [string!]
     console? [logic!]
     /local
     word ptr result sys-word delim? len insert?
     start end delimiters d w change?
 ]
-reduce: native [
+reduce: make native! [
     {Returns a copy of a block, evaluating all expressions}
     value [any-type!]
     /into {Put results in out block, instead of creating a new block}
     out [any-block!] "Target block for results, when /into is used"
 ]
-ref?: function ["Returns true if the value is this type" value [any-type!]]
-refinement?: function ["Returns true if the value is this type" value [any-type!]]
-reflect: action [
+ref?: make function! ["Returns true if the value is this type" value [any-type!]]
+refinement?: make function! ["Returns true if the value is this type" value [any-type!]]
+reflect: make action! [
     {Returns internal details about a value via reflection}
     value [any-type!]
     field [word!] {spec, body, words, etc. Each datatype defines its own reflectors}
 ]
-register-scheme: function [
+register-scheme: make function! [
     "Registers a new scheme"
     spec [object!] "Scheme definition"
     /native
     dispatch [handle!]
 ]
-rejoin: function [
+rejoin: make function! [
     "Reduces and joins a block of values."
     block [block!] "Values to reduce and join"
 ]
-relate: function [
+relate: make function! [
     {Defines a reactive relation whose result is assigned to a word}
     'field [set-word!] {Set-word which will get set to the result of the reaction}
     reaction [block!] "Reactive relation"
     /local obj rule item
 ]
-remainder: action [
+remainder: make action! [
     {Returns what is left over when one value is divided by another}
     value1 [number! money! char! pair! any-point! tuple! vector! time!] "The dividend (numerator)"
     value2 [number! money! char! pair! any-point! tuple! vector! time!] "The divisor (denominator)"
     return: [number! money! char! pair! any-point! tuple! vector! time!] "The remainder"
 ]
-remove: action [
+remove: make action! [
     {Returns the series at the same index after removing a value}
     series [series! port! bitset! map! none!]
     /part {Removes a number of values, or values up to the given series index}
@@ -2422,35 +2422,35 @@ remove: action [
     key-arg [scalar! any-string! any-word! binary! block!]
     return: [series! port! bitset! map! none!]
 ]
-remove-each: native [
+remove-each: make native! [
     {Removes values for each block that returns truthy value}
     'word [word! block!] "Word or block of words to set each time"
     data [series!] "The series to traverse (modified)"
     body [block!] "Block to evaluate (return truthy value to remove)"
 ]
-remove-event-func: function [
+remove-event-func: make function! [
     "Removes an event function previously added"
     id [word! function!] "Handler name or function reference"
     /local svh pos
 ]
-rename: action [
+rename: make action! [
     "Rename a file"
     from [port! file! url!]
     to [port! file! url!]
 ]
-repeat: native [
+repeat: make native! [
     {Evaluates body a number of times, tracking iteration count}
     'word [word!] "Iteration counter; not local to loop"
     value [integer! float!] "Number of times to evaluate body"
     body [block!]
 ]
-repend: function [
+repend: make function! [
     {Appends a reduced value to a series and returns the series head}
     series [series!]
     value
     /only "Appends a block value as a block"
 ]
-replace: function [
+replace: make function! [
     "Replaces values in a series, in place"
     series [any-block! any-string! binary! vector!] "The series to be modified"
     pattern "Specific value or parse rule pattern to match"
@@ -2460,7 +2460,7 @@ replace: function [
     /case "Case-sensitive replacement"
     /local parse? form? quote? deep? rule many? size seek active?
 ]
-request-dir: function [
+request-dir: make function! [
     {Asks user to select a directory and returns full directory path (or block of paths)}
     /title "Window title"
     text [string!]
@@ -2471,7 +2471,7 @@ request-dir: function [
     /keep "Keep previous directory path"
     /multi {TBD: Allows multiple file selection, returned as a block}
 ]
-request-file: function [
+request-file: make function! [
     {Asks user to select a file and returns full file path (or block of paths)}
     /title "Window title"
     text [string!]
@@ -2482,17 +2482,17 @@ request-file: function [
     /save "File save mode"
     /multi {Allows multiple file selection, returned as a block}
 ]
-request-font: function [
+request-font: make function! [
     "Requests a font object"
     /font "Sets the selected font"
     ft [object!]
     /mono "Show monospaced font only"
 ]
-return: native [
+return: make native! [
     "Returns a value from a function"
     value [any-type!]
 ]
-reverse: action [
+reverse: make action! [
     {Reverses the order of elements; returns at same position}
     series [series! port! pair! any-point! tuple!]
     /part "Limits to a given length or position"
@@ -2502,7 +2502,7 @@ reverse: action [
     return: [series! port! pair! any-point! tuple!]
 ]
 
-round: action [
+round: make action! [
     {Returns the nearest integer. Halves round up (away from zero) by default}
     n [number! money! time! pair! any-point!]
     /to {Return the nearest multiple of the scale parameter}
@@ -2514,9 +2514,9 @@ round: action [
     /ceiling "Round in positive direction"
     /half-ceiling "Halves round in positive direction"
 ]
-routine: function [{Defines a function with a given Red spec and Red/System body} spec [block!] body [block!]]
-routine?: function ["Returns true if the value is this type" value [any-type!]]
-rtd-layout: function [
+routine: make function! [{Defines a function with a given Red spec and Red/System body} spec [block!] body [block!]]
+routine?: make function! ["Returns true if the value is this type" value [any-type!]]
+rtd-layout: make function! [
     "Returns a rich-text face from a RTD source code"
     spec [block!] "RTD source code"
     /only "Returns only [text data] facets"
@@ -2524,12 +2524,12 @@ rtd-layout: function [
     face [object!] "Face object to populate"
     return: [object! block!]
 ]
-same?: native [
+same?: make native! [
     "Returns TRUE if two values have the same identity"
     value1 [any-type!]
     value2 [any-type!]
 ]
-save: function [
+save: make function! [
     {Saves a value, block, or other data to a file, URL, binary, or string}
     where [file! url! string! binary! none!] "Where to save"
     value [any-type!] "Value(s) to save"
@@ -2541,8 +2541,8 @@ save: function [
     format [word! none!] "E.g. bmp, gif, jpeg, png, redbin, json, csv"
     /local dst codec data suffix find-encoder? name only pos header-str k v
 ]
-scalar?: function ["Returns true if the value is any type of scalar" value [any-type!]]
-scan: function [
+scalar?: make function! ["Returns true if the value is any type of scalar" value [any-type!]]
+scan: make function! [
     {Returns the guessed type of the first serialized value from the input}
     buffer [binary! string!] "Input UTF-8 buffer or string"
     /next {Returns both the type and the input after the value}
@@ -2550,8 +2550,8 @@ scan: function [
     return: [datatype! none!] {Recognized or guessed type, or NONE on empty input}
 ]
 
-second: function ["Returns the second value in a series" s [series! tuple! pair! any-point! date! time!]]
-select: action [
+second: make function! ["Returns the second value in a series" s [series! tuple! pair! any-point! date! time!]]
+select: make action! [
     {Find a value in a series and return the next value, or NONE}
     series [series! any-object! map! none!]
     value [any-type!]
@@ -2569,8 +2569,8 @@ select: action [
     /reverse {Find the last occurrence of value, from the current index}
     return: [any-type!]
 ]
-series?: function ["Returns true if the value is any type of series" value [any-type!]]
-set: native [
+series?: make function! ["Returns true if the value is any type of series" value [any-type!]]
+set: make native! [
     "Sets the value(s) one or more words refer to"
     word [any-word! block! object! any-path!] "Word, object, map path or block of words to set"
     value [any-type!] "Value or block of values to assign to words"
@@ -2580,13 +2580,13 @@ set: native [
     /some {None values in a block or object value argument, are not set}
     return: [any-type!]
 ]
-set-current-dir: routine ["Sets the platform's current process directory" path [file!]]
-set-env: native [
+set-current-dir: make routine! ["Sets the platform's current process directory" path [file!]]
+set-env: make native! [
     {Sets the value of an operating system environment variable (for current process)}
     var [any-string! any-word!] "Variable to set"
     value [string! none!] "Value to set, or NONE to unset it"
 ]
-set-flag: function [
+set-flag: make function! [
     {Sets (or clears) a flag in a face object; Returns the /flags facet value}
     face [object!] "Face where flag to set/clear"
     flag [any-type!] "Flag to set/clear"
@@ -2594,25 +2594,25 @@ set-flag: function [
     /toggle "Set it if unset, clears it otherwise"
     /local flags pos
 ]
-set-focus: function [
+set-focus: make function! [
     "Sets the focus on the argument face"
     face [object!]
     /local p
 ]
-set-path?: function ["Returns true if the value is this type" value [any-type!]]
-set-quiet: routine [
+set-path?: make function! ["Returns true if the value is this type" value [any-type!]]
+set-quiet: make routine! [
     {Set an object's field to a value without triggering eventual object's events}
     word [any-type!]
     value [any-type!]
     return: [any-type!]
 ]
-set-slot-quiet: routine [
+set-slot-quiet: make routine! [
     {Set a value in series without triggering eventual owner's events}
     series [any-type!]
     value [any-type!]
 ]
-set-word?: function ["Returns true if the value is this type" value [any-type!]]
-shift: native [
+set-word?: make function! ["Returns true if the value is this type" value [any-type!]]
+shift: make native! [
     {Perform a bit shift operation. Right shift (decreasing) by default}
     data [integer!]
     bits [integer!]
@@ -2620,10 +2620,10 @@ shift: native [
     /logical "Use logical shift (unsigned, fill with zero)"
     return: [integer!]
 ]
-shift-left: routine ["Shift bits to the left" data [integer!] bits [integer!]]
-shift-logical: routine ["Shift bits to the right (unsigned)" data [integer!] bits [integer!]]
-shift-right: routine ["Shift bits to the right" data [integer!] bits [integer!]]
-show: function [
+shift-left: make routine! ["Shift bits to the left" data [integer!] bits [integer!]]
+shift-logical: make routine! ["Shift bits to the right (unsigned)" data [integer!] bits [integer!]]
+shift-right: make routine! ["Shift bits to the right" data [integer!] bits [integer!]]
+show: make function! [
     "Display a new face or update it"
     face [object! block!] "Face object to display"
     /with "Link the face to a parent face"
@@ -2632,28 +2632,28 @@ show: function [
     return: [logic!] "true if success"
     /local show? f pending owner word target action new index part state handle new? p field pane
 ]
-show-memory-stats: function [data [block!]
+show-memory-stats: make function! [data [block!]
 /local class used total i c frm unit]
-sign?: native [
+sign?: make native! [
     {Returns sign of N as 1, 0, or -1 (to use as a multiplier)}
     number [number! money! time!]
     return: [integer!]
 ]
-sin: function [
+sin: make function! [
     "Returns the trigonometric sine"
     angle [float!] "Angle in radians"
 ]
-sine: native [
+sine: make native! [
     "Returns the trigonometric sine"
     angle [float! integer!]
     /radians "DEPRECATED: use `sin` native instead"
     return: [float!]
 ]
-single?: function [
+single?: make function! [
     "Returns TRUE if the series length is 1"
     series [series!]
 ]
-size-text: function [
+size-text: make function! [
     "Returns the area size of the text in a face"
     face [object!] "Face containing the text to size"
     /with "Provide a text string instead of face/text"
@@ -2661,18 +2661,18 @@ size-text: function [
     return: [point2D! none!] "Return the text's size or NONE if failed"
     /local h
 ]
-size?: native [
+size?: make native! [
     "Returns the size of a file content"
     file [file!]
     return: [integer! none!]
 ]
-skip: action [
+skip: make action! [
     "Returns the series relative to the current index"
     series [series! port!]
     offset [integer! pair!]
     return: [series! port!]
 ]
-sort: action [
+sort: make action! [
     {Sorts a series (modified); default sort order is ascending}
     series [series! port!]
     /case "Perform a case-sensitive sort"
@@ -2687,76 +2687,76 @@ sort: action [
     /stable "Stable sorting"
     return: [series!]
 ]
-source: function [
+source: make function! [
     "Print the source of a function"
     'word [word! path!] "The name of the function"
     /local val
 ]
-spec-of: function [{Returns the spec of a value that supports reflection} value]
-split: function [
+spec-of: make function! [{Returns the spec of a value that supports reflection} value]
+split: make function! [
     {Break a string series into pieces using the provided delimiters}
     series [any-string!] dlm [string! char! bitset!] /local s
     num
 ]
-split-path: function [
+split-path: make function! [
     [no-trace]
     {Splits a file or URL path. Returns a block containing path and target}
     target [file! url!]
     /local dir pos
 ]
-sqrt: function [
+sqrt: make function! [
     "Returns the square root of a number"
     number [float! integer! percent!]
     return: [float!]
 ]
-square-root: native [
+square-root: make native! [
     "Returns the square root of a number"
     value [float! integer! percent!]
     return: [float!]
 ]
-stack-size?: routine [return: [integer!]]
-stats: native [
+stack-size?: make routine! [return: [integer!]]
+stats: make native! [
     "Returns interpreter statistics"
     /show "TBD:"
     /info {Return detailed info: nodes/series/big x free/used/total, total, low-level heap}
     return: [integer! block!]
 ]
-stop-events: function [
+stop-events: make function! [
     "Stop the last opened event loop"
 ]
-stop-reactor: function [
+stop-reactor: make function! [
     face [object!]
     /deep
     /local list pos f
 ]
-strict-equal?: native [
+strict-equal?: make native! [
     {Returns TRUE if two values are equal, and also the same datatype}
     value1 [any-type!]
     value2 [any-type!]
 ]
-string?: function ["Returns true if the value is this type" value [any-type!]]
-subtract: action [
+string?: make function! ["Returns true if the value is this type" value [any-type!]]
+subtract: make action! [
     "Returns the difference between two values"
     value1 [scalar! vector!] "The minuend"
     value2 [scalar! vector!] "The subtrahend"
     return: [scalar! vector!] "The difference"
 ]
-suffix?: function [
+suffix?: make function! [
     {Returns the suffix (extension) of a filename or url, or NONE if there is no suffix}
     path [file! url! string! email!]
 ]
-sum: function [
+sum: make function! [
     "Returns the sum of all values in a block"
     values [block! vector! paren! hash!]
     /local result value
 ]
-swap: action [
+swap: make action! [
     {Swaps elements between two series or the same series}
     series1 [series! port!]
     series2 [series! port!]
     return: [series! port!]
 ]
-switch: native [
+switch: make native! [
     {Evaluates the first block following the value found in cases}
     value [any-type!] "The value to match"
     cases [block!]
@@ -4767,7 +4767,7 @@ system: make object! [
             :result
         ]
         newline: #"^/"
-        buffer: {?: function [^/    {Displays information about functions, values, objects, and datatypes.}^/    'word [any-type!]^/]^/??: function [^/    "Prints a word and the value it refers to (molded)"^/    'value [word! path!]^/]^/a-an: function [^/    {Returns the appropriate variant of a or an (simple, vs 100% grammatically correct)}^/    str [string!]^/    /pre "Prepend to str"^/    /local tmp^/]^/about: function [^/    "Print Red version information"^/    /debug {Print full Red and OS version information suitable for submitting issues}^/    /cc "Also copy to clipboard"^/    /local git plt txt^/]^/absolute: action [^/    "Returns the non-negative value"^/    value [number! money! char! pair! time! any-point!]^/    return: [number! money! char! pair! time! any-point!]^/]^/acos: function [^/    {Returns the trigonometric arccosine in radians in range [0,pi]}^/    cosine [float!] "in range [-1,1]"^/]^/action?: function ["Returns true if the value is this type" value [any-type!]]^/add: action [^/    "Returns the sum of the two values"^/    value1 [scalar! vector!] "The augend"^/    value2 [scalar! vector!] "The addend"^/    return: [scalar! vector!] "The sum"^/]^/alert: function [^/    {Displays an alert message in a pop-up modal window}^/    msg [string! block!] "Message to display"^/]^/all: native [^/    {Evaluates and returns the last value if all are truthy; else NONE}^/    conds [block!]^/]^/all-word?: function ["Returns true if the value is any type of all-word" value [any-type!]]^/also: function [^/    {Returns the first value, but also evaluates the second}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/alter: function [^/    {If a value is not found in a series, append it; otherwise, remove it. Returns true if added}^/    series [series!]^/    value^/]^/and~: action [^/    "Returns the first value ANDed with the second"^/    value1 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/    value2 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/    return: [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/]^/any: native [^/    {Evaluates and returns the first truthy value, if any; else NONE}^/    conds [block!]^/]^/any-block?: function [{Returns true if the value is any type of any-block} value [any-type!]]^/any-function?: function [{Returns true if the value is any type of any-function} value [any-type!]]^/any-interesting?: function [{Returns true if the value is any type of any-function} value [any-type!]]^/any-list?: function ["Returns true if the value is any type of any-list" value [any-type!]]^/any-object?: function [{Returns true if the value is any type of any-object} value [any-type!]]^/any-path?: function ["Returns true if the value is any type of any-path" value [any-type!]]^/any-point?: function [{Returns true if the value is any type of any-point} value [any-type!]]^/any-string?: function [{Returns true if the value is any type of any-string} value [any-type!]]^/any-word?: function ["Returns true if the value is any type of any-word" value [any-type!]]^/append: action [^/    {Inserts value(s) at series tail; returns series head}^/    series [series! bitset! port!]^/    value [any-type!]^/    /part "Limit the number of values inserted"^/    length [number! series!]^/    /only {Insert block types as single values (overrides /part)}^/    /dup "Duplicate the inserted values"^/    count [integer!]^/    return: [series! port! bitset!]^/]^/apply: native [^/    "Apply a function to a reduced block of arguments"^/    func [word! path! any-function!] "Function to apply, with eventual refinements"^/    args [block!] "Block of args, reduced first"^/    /all {Provide every argument in the function spec, in order, tail-completed with false/none.}^/    /safer {Forces single refinement arguments, skip them when inactive instead of evaluating}^/]^/arccosine: native [^/    {Returns the trigonometric arccosine in degrees in range [0,180]}^/    cosine [float! integer!] "in range [-1,1]"^/    /radians "DEPRECATED: use `acos` native instead"^/    return: [float!]^/]^/arcsine: native [^/    {Returns the trigonometric arcsine in degrees in range [-90,90]}^/    sine [float! integer!] "in range [-1,1]"^/    /radians "DEPRECATED: use `asin` native instead"^/    return: [float!]^/]^/arctangent: native [^/    {Returns the trigonometric arctangent in degrees in range [-90,90]}^/    tangent [float! integer!] "in range [-inf,+inf]"^/    /radians "DEPRECATED: use `atan` native instead"^/    return: [float!]^/]^/arctangent2: native [^/    {Returns the smallest angle between the vectors (1,0) and (x,y) in degrees (-180,180]}^/    y [float! integer!]^/    x [float! integer!]^/    /radians "DEPRECATED: use `atan2` native instead"^/    return: [float!]^/]^/as: native [^/    {Coerce a series into a compatible datatype without copying it}^/    type [datatype! block! paren! any-path! any-string!] "The datatype or example value"^/    spec [block! paren! any-path! any-string!] "The series to coerce"^/]^/as-color: routine [^/    "Combine R, G and B values into a tuple"^/    r [integer!]^/    g [integer!]^/    b [integer!]^/]^/as-ipv4: routine [^/    "Combine a, b, c and d values into a tuple"^/    a [integer!]^/    b [integer!]^/    c [integer!]^/    d [integer!]^/]^/as-money: native [^/    {Combine currency code and amount into a monetary value}^/    currency [word!]^/    amount [integer! float!]^/    return: [money!]^/]^/as-pair: native [^/    "Combine X and Y values into a pair"^/    x [integer! float!]^/    y [integer! float!]^/]^/as-point2D: native [^/    "Combine X and Y values into a 2D point"^/    x [integer! float!]^/    y [integer! float!]^/]^/as-point3D: native [^/    "Combine X, Y and Z values into a 3D point"^/    x [integer! float!]^/    y [integer! float!]^/    z [integer! float!]^/]^/as-rgba: routine [^/    {Combine R, G, B and A color components into a tuple}^/    r [integer!]^/    g [integer!]^/    b [integer!]^/    a [integer!]^/]^/asin: function [^/    {Returns the trigonometric arcsine in radians in range [-pi/2,pi/2])}^/    sine [float!] "in range [-1,1]"^/]^/ask: function [^/    "Prompt the user for input"^/    question [string!]^/    /hide^/    /history "specify the history block"^/    blk [block!]^/    return: [string!]^/    /local t? line^/]^/at: action [^/    "Returns a series at a given index"^/    series [series! port!]^/    index [integer! pair!]^/    return: [series! port!]^/]^/atan: function [^/    {Returns the trigonometric arctangent in radians in range [-pi/2,+pi/2]}^/    tangent [float!] "in range [-inf,+inf]"^/]^/atan2: function [^/    {Returns the smallest angle between the vectors (1,0) and (x,y) in range (-pi,pi]}^/    y [float! integer!]^/    x [float! integer!]^/    return: [float!]^/]^/attempt: function [^/    {Tries to evaluate a block and returns result or NONE on error}^/    code [block!]^/    /safer "Capture all possible errors and exceptions"^/    /local all result^/]^/average: function [^/    "Returns the average of all values in a block"^/    block [block! vector! paren! hash!]^/]^/back: action [^/    "Returns a series at the previous index"^/    series [series! port!]^/    return: [series! port!]^/]^/binary?: function ["Returns true if the value is this type" value [any-type!]]^/bind: native [^/    "Bind words to a context; returns rebound words"^/    word [block! any-word!]^/    context [any-word! any-object! function!]^/    /copy "Deep copy blocks before binding"^/    return: [block! any-word!]^/]^/bitset?: function ["Returns true if the value is this type" value [any-type!]]^/block?: function ["Returns true if the value is this type" value [any-type!]]^/body-of: function [{Returns the body of a value that supports reflection} value]^/break: native [^/    {Breaks out of a loop, while, until, repeat, foreach, etc}^/    /return "Forces the loop function to return a value"^/    value [any-type!]^/]^/browse: native [^/    {Opens the URL in a web browser or the file in the associated application}^/    url [url! file!]^/]^/call: native [^/    "Executes a shell command to run another process"^/    cmd [string! file!] "A shell command or an executable file"^/    /wait "Runs command and waits for exit"^/    /show {Force the display of system's shell window (Windows only)}^/    /console {Runs command with I/O redirected to console (CLI console only at present)}^/    /shell "Forces command to be run from shell"^/    /input in [string! file! binary!] "Redirects in to stdin"^/    /output out [string! file! binary!] "Redirects stdout to out"^/    /error err [string! file! binary!] "Redirects stderr to err"^/    return: [integer!] "0 if success, -1 if error, or a process ID"^/]^/caret-to-offset: function [^/    {Given a text position, returns the corresponding coordinate relative to the top-left of the layout box}^/    face [object!]^/    pos [integer!]^/    /lower "lower end offset of the caret"^/    return: [point2D!]^/    /local opt^/]^/case: native [^/    {Evaluates the block following the first truthy condition}^/    cases [block!] "Block of condition-block pairs"^/    /all {Test all conditions, evaluating the block following each truthy condition}^/]^/catch: native [^/    {Catches a throw from a block and returns its value}^/    block [block!] "Block to evaluate"^/    /name "Catches a named throw"^/    word [word! block!] "One or more names"^/]^/cause-error: function [^/    {Causes an immediate error throw, with the provided information}^/    err-type [word!]^/    err-id [word!]^/    args [block! string!]^/]^/cd: function [^/    "Changes the active directory path"^/    :dir [file! word! path!] {New active directory of relative path to the new one}^/]^/center-face: function [^/    "Center a face inside its parent"^/    face [object!] "Face to center"^/    /x "Center horizontally only"^/    /y "Center vertically only"^/    /with {Provide a reference face for centering instead of parent face}^/    parent [object!] "Reference face"^/    return: [object!] "Returns the centered face"^/    /local pos^/]^/change: action [^/    {Changes a value in a series and returns the series after the change}^/    series [series! port!] "Series at point to change"^/    value [any-type!] "The new value"^/    /part {Limits the amount to change to a given length or position}^/    range [number! series!]^/    /only "Changes a series as a series."^/    /dup "Duplicates the change a specified number of times"^/    count [number!]^/]^/change-dir: function [^/    "Changes the active directory path"^/    dir [file! word! path!] {New active directory of relative path to the new one}^/]^/char?: function ["Returns true if the value is this type" value [any-type!]]^/charset: function [^/    "Shortcut for `make bitset!`"^/    spec [block! integer! char! string! bitset! binary!]^/]^/checksum: native [^/    "Computes a checksum, CRC, hash, or HMAC"^/    data [binary! string! file!]^/    method [word!] {MD5 SHA1 SHA256 SHA384 SHA512 CRC32 TCP ADLER32 hash}^/    /with {Extra value for HMAC key or hash table size; not compatible with TCP/CRC32/ADLER32 methods}^/    spec [any-string! binary! integer!] {String or binary for MD5/SHA* HMAC key, integer for hash table size}^/    return: [integer! binary!]^/]^/class-of: function ["Returns the class ID of an object" value]^/clean-path: function [^/    [no-trace]^/    {Cleans-up '.' and '..' in path; returns the cleaned path}^/    file [file! url! string!]^/    /only "Do not prepend current directory"^/    /dir "Add a trailing / if missing"^/    /local out cnt f not-file? prot^/]^/clear: action [^/    {Removes series values from current index to tail; returns new tail}^/    series [series! port! bitset! map! none!]^/    return: [series! port! bitset! map! none!]^/]^/clear-reactions: function ["Removes all reactive relations"]^/clock: function [^/    {Display execution time of code, returning result of it's evaluation}^/    code [block!]^/    /times n [integer! float!]^/    {Repeat N times (default: once); displayed time is per iteration}^/    /local result^/    text dt unit^/]^/close: action [^/    "Closes a port"^/    port [port!]^/]^/collect: function [^/    {Collect in a new block all the values passed to KEEP function from the body block}^/    body [block!] "Block to evaluate"^/    /into {Insert into a buffer instead (returns position after insert)}^/    collected [series!] "The buffer series (modified)"^/    /local keep rule pos^/]^/collect-calls: routine [blk [block!]]^/comment: function ["Consume but don't evaluate the next value" 'value]^/complement: action [^/    {Returns the opposite (complementing) value of the input value}^/    value [logic! integer! tuple! bitset! typeset! binary!]^/    return: [logic! integer! tuple! bitset! typeset! binary!]^/]^/complement?: native [^/    "Returns TRUE if the bitset is complemented"^/    bits [bitset!]^/]^/compose: native [^/    "Returns a copy of a block, evaluating only parens"^/    value [block!]^/    /deep "Compose nested blocks"^/    /only {Compose nested blocks as blocks containing their values}^/    /into {Put results in out block, instead of creating a new block}^/    out [any-block!] "Target block for results, when /into is used"^/]^/compress: native [^/    "Compresses data"^/    data [any-string! binary!]^/    method [word!] "zlib deflate gzip"^/    return: [binary!]^/]^/construct: native [^/    {Makes a new object from an unevaluated spec; standard logic words are evaluated}^/    block [block!]^/    /with "Use a prototype object"^/    object [object!] "Prototype object"^/    /only "Don't evaluate standard logic words"^/]^/context: function [^/    "Makes a new object from an evaluated spec"^/    spec [block!]^/]^/context?: native [^/    "Returns the context to which a word is bound"^/    word [any-word!] "Word to check"^/    return: [object! function! none!]^/]^/continue: native [^/    "Throws control back to top of loop"^/]^/copy: action [^/    "Returns a copy of a non-scalar value"^/    value [series! any-object! bitset! map!]^/    /part "Limit the length of the result"^/    length [number! series! pair!]^/    /deep "Copy nested values"^/    /types "Copy only specific types of non-scalar values"^/    kind [datatype!]^/    return: [series! any-object! bitset! map!]^/]^/cos: function [^/    "Returns the trigonometric cosine"^/    angle [float!] "Angle in radians"^/]^/cosine: native [^/    "Returns the trigonometric cosine"^/    angle [float! integer!]^/    /radians "DEPRECATED: use `cos` native instead"^/    return: [float!]^/]^/count-chars: routine [^/    {Count UTF-8 encoded characters between two positions in a binary series}^/    start [binary!]^/    pos [binary!]^/    return: [integer!]^/]^/create: action [^/    "Send port a create request"^/    port [port! file! url! block!]^/]^/create-dir: routine ["Create the given directory" path [file!]]^/datatype?: function ["Returns true if the value is this type" value [any-type!]]^/date?: function ["Returns true if the value is this type" value [any-type!]]^/debase: native [^/    {Decodes binary-coded string (BASE-64 default) to binary value}^/    value [string!] "The string to decode"^/    /base "Binary base to use"^/    base-value [integer!] "The base to convert from: 64, 58, 16, or 2"^/]^/debug: function [^/    {Runs argument code through an interactive debugger}^/    code [any-type!] "Code to debug"^/    /later {Enters the interactive debugger later, on reading @stop value}^/]^/debug-info?: function ["Internal use only" face [object!] return: [logic!]]^/decode-url: function [^/    {Decode a URL into an object containing its constituent parts}^/    url [url! string!]^/]^/decompress: native [^/    "Decompresses data"^/    data [binary!]^/    method [word!] "zlib deflate gzip"^/    /size {Specify an uncompressed data size (ignored for GZIP)}^/    sz [integer!] "Uncompressed data size; must not be negative"^/    return: [binary!]^/]^/deep-reactor: function [spec [block!]]^/^/dehex: native [^/    "Converts URL-style hex encoded (%xx) strings"^/    value [any-string!]^/    return: [string!] "Always return a string"^/]^/delete: action [^/    "Deletes the specified file or empty folder"^/    file [file! port!]^/]^/difference: native [^/    "Returns the special difference of two data sets"^/    set1 [block! hash! string! bitset! typeset! date!]^/    set2 [block! hash! string! bitset! typeset! date!]^/    /case "Use case-sensitive comparison"^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    return: [block! hash! string! bitset! typeset! time!]^/]^/dir: function [{Display a directory listing, for the current dir if none is given} 'dir [any-type!]]^/dir?: function [{Returns TRUE if the value looks like a directory spec} file [file! url!]]^/dirize: function [^/    {Returns a copy of the path turned into a directory}^/    path [file! string! url!]^/]^/distance?: function [^/    {Returns the distance between 2 points or face centers}^/    A [object! planar!] "First face or point"^/    B [object! planar!] "Second face or point"^/    return: [float!] "Distance between them"^/    /local d^/]^/divide: action [^/    "Returns the quotient of two values"^/    value1 [number! money! char! pair! tuple! vector! time! any-point!] "The dividend (numerator)"^/    value2 [number! money! char! pair! tuple! vector! time! any-point!] "The divisor (denominator)"^/    return: [number! money! char! pair! tuple! vector! time! any-point!] "The quotient"^/]^/do: native [^/    {Evaluates a value, returning the last evaluation result}^/    value [any-type!]^/    /expand "Expand directives before evaluation"^/    /args {If value is a script, this will set its system/script/args}^/    arg "Args passed to a script (normally a string)"^/    /next {Do next expression only, return it, update block word}^/    position [word!] "Word updated with new block position"^/    /trace^/    callback [function! [^/        event [word!]^/        code [any-block! none!]^/        offset [integer!]^/        value [any-type!]^/        ref [any-type!]^/        frame [pair!]^/    ]]^/]^/do-actor: function ["Internal Use Only" face [object!] event [event! none!] type [word!] /local result^/act name]^/do-events: function [^/    {Launch the event loop, blocks until all windows are closed}^/    /no-wait "Process an event in the queue and returns at once"^/    return: [logic! word!] "Returned value from last event"^/    /local result screen win^/]^/do-file: function ["Internal Use Only" file [file! url!] callback [function! none!]^//local ws saved src found? code header? header new-path list c done?]^/do-no-sync: function [^/    "Evaluate CODE with view/auto-sync?: off"^/    code [block!]^/    /local r e old^/]^/do-safe: function ["Internal Use Only" code [block!] /local result error]^/do-thru: function [^/    {Evaluates a remote Red script through local disk cache}^/    url [url!] "Remote file address"^/    /update "Force a cache update"^/]^/does: native [^/    {Defines a function with no arguments or local variables}^/    body [block!]^/]^/draw: function [^/    "Draws scalable vector graphics to an image"^/    image [image! pair!] "Image or size for an image"^/    cmd [block!] "Draw commands"^/    /transparent "Make a transparent image, if pair! spec is used"^/    return: [image!]^/]^/dt: function [^/    "Returns the time required to evaluate a block"^/    body [block!]^/    return: [time!]^/    /local t0^/]^/dump-face: function [^/    {Display debugging info about a face and its children}^/    face [object!] "Face to analyze"^/    /local depth f^/]^/dump-reactions: function [^/    {Outputs all the current reactive relations for debugging purpose}^/    /local limit count obj field reaction target list^/]^/either: native [^/    {If conditional expression is truthy, evaluate the first branch; else evaluate the alternative}^/    cond [any-type!]^/    true-blk [block!]^/    false-blk [block!]^/]^/ellipsize-at: function [^/    {Truncate and add ellipsis if str is longer than len}^/    str [string!] "(modified)"^/    len [integer!] "Max length"^/]^/email?: function ["Returns true if the value is this type" value [any-type!]]^/empty?: function [^/    {Returns true if data is a series at its tail or an empty map}^/    data [series! none! map!]^/    return: [logic!]^/]^/enbase: native [^/    {Encodes a string into a binary-coded string (BASE-64 default)}^/    value [binary! string!] "If string, will be UTF8 encoded"^/    /base "Binary base to use"^/    base-value [integer!] "The base to convert from: 64, 58, 16, or 2"^/]^/encode-url: function [url-obj [object!] "What you'd get from decode-url"^//local result]^/enhex: native [^/    "Encode URL-style hex encoded (%xx) strings"^/    value [any-string!]^/    return: [string!] "Always return a string"^/]^/equal?: native [^/    "Returns TRUE if two values are equal"^/    value1 [any-type!]^/    value2 [any-type!]^/]^/error?: function ["Returns true if the value is this type" value [any-type!]]^/eval-set-path: function ["Internal Use Only" value1]^/even?: action [^/    {Returns true if the number is evenly divisible by 2}^/    number [number! money! char! time!]^/    return: [logic!]^/]^/event?: routine ["Returns true if the value is this type" value [any-type!] return: [logic!]]^/exclude: native [^/    {Returns the first data set less the second data set}^/    set1 [block! hash! string! bitset! typeset!]^/    set2 [block! hash! string! bitset! typeset!]^/    /case "Use case-sensitive comparison"^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    return: [block! hash! string! bitset! typeset!]^/]^/exists-thru?: function [^/    {Returns true if the remote file is present in the local disk cache}^/    url [url! file!] "Remote file address"^/]^/exists?: routine ["Returns TRUE if the file exists" path [file!] return: [logic!]]^/exit: native [^/    "Exits a function, returning no value"^/]^/exp: native [^/    {Raises E (the base of natural logarithm) to the power specified}^/    value [float! integer! percent!]^/    return: [float!]^/]^/expand: function [^/    {Preprocess the argument block and display the output (console only)}^/    blk [block!] "Block to expand"^/]^/expand-directives: function [^/    {Invokes the preprocessor on argument list, modifying and returning it}^/    code [block! paren!] "List of Red values to preprocess"^/    /clean "Clear all previously created macros and words"^/    /local job saved^/]^/extend: native [^/    {Extend an object or map value with list of key and value pairs}^/    obj [object! map!]^/    spec [block! hash! map!]^/    /case "Use case-sensitive comparison"^/]^/extract: function [^/    {Extracts a value from a series at regular intervals}^/    series [series!]^/    width [integer!] "Size of each entry (the skip)"^/    /index "Extract from an offset position"^/    pos [integer!] "The position"^/    /into {Provide an output series instead of creating a new one}^/    output [series!] "Output series"^/]^/extract-boot-args: function [^/    {Process command-line arguments and store values in system/options (internal usage)}^/    /local args at-arg2 ws split-mode arg-end s' e' arg2-update s e^/]^/face: make object! [^/    type: 'window^/    offset: (559.2, 339.2)^/    size: 839x654^/    text: "Red Console"^/    image: none^/    color: none^/    menu: none^/    data: none^/    enabled?: true^/    visible?: false^/    selected: make object! [^/        type: 'rich-text^/        offset: (0, 0)^/        size: 840x655^/        text: none^/        image: none^/        color: 22.22.22^/        menu: none^/        data: none^/        enabled?: true^/        visible?: true^/        selected: none^/        flags: [scrollable all-over]^/        options: [cursor: I-beam]^/        parent: make object! [...]^/        pane: none^/        state: [handle! 0 none false]^/        rate: 10^/        edge: none^/        para: none^/        font: make object! [^/            name: "Consolas"^/            size: 11^/            style: none^/            angle: 0^/            color: 222.222.222^/            anti-alias?: false^/            shadow: none^/            state: [handle! none none]^/            parent: []^/        ]^/        actors: make object! [^/            on-time: func [face [object!] event [event!]][^/                if all [caret/enabled? none? caret/rate] [caret/rate: caret-rate]^/                terminal/on-time^/                'done^/            ]^/            on-drawing: func [face [object!] event [event!]][^/                terminal/paint^/            ]^/            on-scroll: func [face [object!] event [event!]][^/                terminal/scroll event^/            ]^/            on-wheel: func [face [object!] event [event!]][^/                either event/ctrl? [^/                    terminal/zoom event^/                ] [^/                    terminal/scroll event^/                ]^/            ]^/            on-key: func [face [object!] event [event!]][^/                terminal/press-key event^/            ]^/            on-key-down: func [face [object!] event [event!]][^/                if all [1 = length? event/flags find event/flags 'alt] [^/                    switch event/key [^/                        #"A" [terminal/select-all]^/                        #"O" [show-cfg-dialog]^/                    ]^/                ]^/            ]^/            on-ime: func [face [object!] event [event!]][^/                terminal/process-ime-input event^/            ]^/            on-down: func [face [object!] event [event!]][^/                terminal/mouse-down event^/            ]^/            on-up: func [face [object!] event [event!]][^/                terminal/mouse-up event^/            ]^/            on-alt-down: func [face [object!] event [event!]][^/                if cfg/mouse-paste? = 'true [^/                    either terminal/text-selected? [^/                        terminal/copy-selection^/                        clear terminal/selects^/                        system/view/platform/redraw face^/                    ] [^/                        terminal/paste^/                    ]^/                ]^/            ]^/            on-over: func [face [object!] event [event!]][^/                terminal/mouse-move to-pair event/offset^/            ]^/            on-menu: func [face [object!] event [event!]][^/                switch event/picked [^/                    copy [terminal/copy-selection]^/                    paste [terminal/paste]^/                    select-all [terminal/select-all]^/                ]^/                'done^/            ]^/        ]^/        extra: none^/        draw: none^/        tabs: none^/        line-spacing: 'default^/        handles: none^/        init: func [/local box][^/            terminal/windows: get in get-current-screen 'pane^/            box: terminal/box^/            box/data: make block! 200^/            scroller: get-scroller self 'horizontal^/            scroller/visible?: no^/            scroller: get-scroller self 'vertical^/            scroller/position: 1^/            scroller/max-size: 2^/        ]^/    ]^/    flags: [resize]^/    options: none^/    parent: make object! [^/        type: 'screen^/        offset: 0x0^/        size: 2048x1152^/        text: none^/        image: none^/        color: none^/        menu: none^/        data: 1.25^/        enabled?: true^/        visible?: true^/        selected: none^/        flags: none^/        options: none^/        parent: none^/        pane: []^/        state: [handle! 0 none [1]]^/        rate: none^/        edge: none^/        para: none^/        font: none^/        actors: none^/        extra: none^/        draw: none^/    ]^/    pane: [make object! [^/        type: 'rich-text^/        offset: (0, 0)^/        size: 840x655^/        text: none^/        image: none^/        color: 22.22.22^/        menu: none^/        data: none^/        enabled?: true^/        visible?: true^/        selected: none^/        flags: [scrollable all-over]^/        options: [cursor: I-beam]^/        parent: make object! [...]^/        pane: none^/        state: [handle! 0 none false]^/        rate: 10^/        edge: none^/        para: none^/        font: make object! [^/            name: "Consolas"^/            size: 11^/            style: none^/            angle: 0^/            color: 222.222.222^/            anti-alias?: false^/            shadow: none^/            state: [handle! none none]^/            parent: []^/        ]^/        actors: make object! [^/            on-time: func [face [object!] event [event!]][^/                if all [caret/enabled? none? caret/rate] [caret/rate: caret-rate]^/                terminal/on-time^/                'done^/            ]^/            on-drawing: func [face [object!] event [event!]][^/                terminal/paint^/            ]^/            on-scroll: func [face [object!] event [event!]][^/                terminal/scroll event^/            ]^/            on-wheel: func [face [object!] event [event!]][^/                either event/ctrl? [^/                    terminal/zoom event^/                ] [^/                    terminal/scroll event^/                ]^/            ]^/            on-key: func [face [object!] event [event!]][^/                terminal/press-key event^/            ]^/            on-key-down: func [face [object!] event [event!]][^/                if all [1 = length? event/flags find event/flags 'alt] [^/                    switch event/key [^/                        #"A" [terminal/select-all]^/                        #"O" [show-cfg-dialog]^/                    ]^/                ]^/            ]^/            on-ime: func [face [object!] event [event!]][^/                terminal/process-ime-input event^/            ]^/            on-down: func [face [object!] event [event!]][^/                terminal/mouse-down event^/            ]^/            on-up: func [face [object!] event [event!]][^/                terminal/mouse-up event^/            ]^/            on-alt-down: func [face [object!] event [event!]][^/                if cfg/mouse-paste? = 'true [^/                    either terminal/text-selected? [^/                        terminal/copy-selection^/                        clear terminal/selects^/                        system/view/platform/redraw face^/                    ] [^/                        terminal/paste^/                    ]^/                ]^/            ]^/            on-over: func [face [object!] event [event!]][^/                terminal/mouse-move to-pair event/offset^/            ]^/            on-menu: func [face [object!] event [event!]][^/                switch event/picked [^/                    copy [terminal/copy-selection]^/                    paste [terminal/paste]^/                    select-all [terminal/select-all]^/                ]^/                'done^/            ]^/        ]^/        extra: none^/        draw: none^/        tabs: none^/        line-spacing: 'default^/        handles: none^/        init: func [/local box][^/            terminal/windows: get in get-current-screen 'pane^/            box: terminal/box^/            box/data: make block! 200^/            scroller: get-scroller self 'horizontal^/            scroller/visible?: no^/            scroller: get-scroller self 'vertical^/            scroller/position: 1^/            scroller/max-size: 2^/        ]^/    ] make object! [^/        type: 'base^/        offset: (0, 0)^/        size: 1x17^/        text: none^/        image: none^/        color: 222.222.222.1^/        menu: none^/        data: none^/        enabled?: false^/        visible?: true^/        selected: none^/        flags: none^/        options: [caret make object! [^/            type: 'rich-text^/            offset: (0, 0)^/            size: 840x655^/            text: none^/            image: none^/            color: 22.22.22^/            menu: none^/            data: none^/            enabled?: true^/            visible?: true^/            selected: none^/            flags: [scrollable all-over]^/            options: [cursor: I-beam]^/            parent: make object! [...]^/            pane: none^/            state: [handle! 0 none false]^/            rate: 10^/            edge: none^/            para: none^/            font: make object! [^/                name: "Consolas"^/                size: 11^/                style: none^/                angle: 0^/                color: 222.222.222^/                anti-alias?: false^/                shadow: none^/                state: [handle! none none]^/                parent: []^/            ]^/            actors: make object! [^/                on-time: func [face [object!] event [event!]][^/                    if all [caret/enabled? none? caret/rate] [caret/rate: caret-rate]^/                    terminal/on-time^/                    'done^/                ]^/                on-drawing: func [face [object!] event [event!]][^/                    terminal/paint^/                ]^/                on-scroll: func [face [object!] event [event!]][^/                    terminal/scroll event^/                ]^/                on-wheel: func [face [object!] event [event!]][^/                    either event/ctrl? [^/                        terminal/zoom event^/                    ] [^/                        terminal/scroll event^/                    ]^/                ]^/                on-key: func [face [object!] event [event!]][^/                    terminal/press-key event^/                ]^/                on-key-down: func [face [object!] event [event!]][^/                    if all [1 = length? event/flags find event/flags 'alt] [^/                        switch event/key [^/                            #"A" [terminal/select-all]^/                            #"O" [show-cfg-dialog]^/                        ]^/                    ]^/                ]^/                on-ime: func [face [object!] event [event!]][^/                    terminal/process-ime-input event^/                ]^/                on-down: func [face [object!] event [event!]][^/                    terminal/mouse-down event^/                ]^/                on-up: func [face [object!] event [event!]][^/                    terminal/mouse-up event^/                ]^/                on-alt-down: func [face [object!] event [event!]][^/                    if cfg/mouse-paste? = 'true [^/                        either terminal/text-selected? [^/                            terminal/copy-selection^/                            clear terminal/selects^/                            system/view/platform/redraw face^/                        ] [^/                            terminal/paste^/                        ]^/                    ]^/                ]^/                on-over: func [face [object!] event [event!]][^/                    terminal/mouse-move to-pair event/offset^/                ]^/                on-menu: func [face [object!] event [event!]][^/                    switch event/picked [^/                        copy [terminal/copy-selection]^/                        paste [terminal/paste]^/                        select-all [terminal/select-all]^/                    ]^/                    'done^/                ]^/            ]^/            extra: none^/            draw: none^/            tabs: none^/            line-spacing: 'default^/            handles: none^/            init: func [/local box][^/                terminal/windows: get in get-current-screen 'pane^/                box: terminal/box^/                box/data: make block! 200^/                scroller: get-scroller self 'horizontal^/                scroller/visible?: no^/                scroller: get-scroller self 'vertical^/                scroller/position: 1^/                scroller/max-size: 2^/            ]^/        ] cursor: I-beam accelerated: yes]^/        parent: make object! [...]^/        pane: none^/        state: [handle! 0 none false]^/        rate: 0:00:00.53^/        edge: none^/        para: none^/        font: none^/        actors: make object! [^/            on-time: func [face [object!] event [event!]][^/                face/color: either face/color = caret-clr [255.255.255.254] [caret-clr]^/                'done^/            ]^/        ]^/        extra: none^/        draw: none^/    ] make object! [^/        type: 'panel^/        offset: (0, 0)^/        size: 150x200^/        text: none^/        image: none^/        color: 0.0.128^/        menu: none^/        data: none^/        enabled?: true^/        visible?: false^/        selected: none^/        flags: none^/        options: none^/        parent: make object! [...]^/        pane: none^/        state: [handle! 0 none false]^/        rate: none^/        edge: none^/        para: none^/        font: make object! [^/            name: "Consolas"^/            size: 11^/            style: none^/            angle: 0^/            color: 255.255.255^/            anti-alias?: false^/            shadow: none^/            state: [handle! none none]^/            parent: [make object! [^/                type: 'rich-text^/                offset: none^/                size: 820x655^/                text: "XXXXXXXXXX"^/                image: none^/                color: none^/                menu: none^/                data: []^/                enabled?: true^/                visible?: true^/                selected: none^/                flags: none^/                options: none^/                parent: none^/                pane: none^/                state: none^/                rate: none^/                edge: none^/                para: none^/                font: make object! [^/                    name: "Consolas"^/                    size: 11^/                    style: none^/                    angle: 0^/                    color: 222.222.222^/                    anti-alias?: false^/                    shadow: none^/                    state: [handle! none none]^/                    parent: [...]^/                ]^/                actors: none^/                extra: none^/                draw: none^/                tabs: 32.4^/                line-spacing: 17^/                handles: [handle! handle! "XXXXXXXXXX" true]^/            ]]^/        ]^/        actors: make object! [^/            on-key-down: func [face [object!] event [event!]][^/                probe event/key^/            ]^/        ]^/        extra: none^/        draw: none^/    ]]^/    state: [handle! 0 none false]^/    rate: none^/    edge: none^/    para: none^/    font: none^/    actors: make object! [^/        on-menu: func [face [object!] event [event!] /local ft f][^/            switch event/picked [^/                about-msg [display-about]^/                shortcuts [show-shortcuts]^/                quit [self/on-close face event]^/                run-file [if f: request-file [terminal/run-file f]]^/                choose-font [^/                    if ft: request-font/font/mono font [^/                        font: ft^/                        console/font: font^/                        terminal/zoom font^/                    ]^/                ]^/                settings [show-cfg-dialog]^/            ]^/        ]^/        on-close: func [face [object!] event [event!]][^/            system/view/platform/exit-event-loop^/            foreach screen system/view/screens [clear head screen/pane]^/            quit^/        ]^/        on-resizing: func [face [object!] event [event!]^/        /local new-sz][^/            new-sz: to-pair event/offset + 1x1^/            console/size: new-sz^/            terminal/resize new-sz^/            terminal/adjust-console-size new-sz^/            unless system/view/auto-sync? [show face]^/        ]^/        on-resize: func [face [object!] event [event!]^/        /local new-sz][^/            new-sz: to-pair event/offset + 1x1^/            console/size: new-sz^/            terminal/resize new-sz^/            terminal/adjust-console-size new-sz^/            unless system/view/auto-sync? [show face]^/        ]^/        on-focus: func [face [object!] event [event!]][^/            focused?: yes^/            caret/color: caret-clr^/            unless caret/enabled? [caret/enabled?: yes]^/            caret/rate: caret-rate^/            terminal/refresh/force^/        ]^/        on-unfocus: func [face [object!] event [event!]][^/            focused?: no^/            if caret/enabled? [caret/enabled?: no]^/            caret/rate: none^/        ]^/        on-key-down: func [face [object!] event [event!]][^/            if event/key = 'F12 [^/                cfg/menu-bar?: to-word none? face/menu^/                toggle-menu-bar^/            ]^/        ]^/    ]^/    extra: none^/    draw: none^/]^/^/face?: function [^/    "Returns TRUE if the value is a face! object"^/    value "Value to test"^/    return: [logic!]^/]^/fetch-help: function [^/    {Returns information about functions, values, objects, and datatypes.}^/    'word [any-type!] "Omit the word arg for HELP usage."^/    /local ref-given? value^/]^/fifth: function ["Returns the fifth value in a series" s [series! tuple! date!]]^/file?: function ["Returns true if the value is this type" value [any-type!]]^/find: action [^/    {Returns the series where a value is found, or NONE}^/    series [series! bitset! typeset! port! map! none!]^/    value [any-type!] {Typesets and datatypes can be used to search by datatype}^/    /part "Limit the length of the search"^/    length [number! series!]^/    /only {Treat series and typeset value arguments as single values}^/    /case "Perform a case-sensitive search"^/    /same {Use "same?" as comparator}^/    /any "TBD: Use * and ? wildcards in string searches"^/    /with "TBD: Use custom wildcards in place of * and ?"^/    wild [string!]^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    /last "Find the last occurrence of value, from the tail"^/    /reverse {Find the last occurrence of value, from the current index}^/    /tail {Return the tail of the match found, rather than the head}^/    /match "Match at current index only"^/]^/find-flag?: routine [^/    "Checks a flag in a face object"^/    facet [any-type!]^/    flag [word!]^/]^/first: function ["Returns the first value in a series" s [series! tuple! pair! any-point! date! time!]]^/flip-exe-flag: function [^/    {Flip the sub-system for the red.exe between console and GUI modes (Windows only)}^/    path [file!] "Path to the red.exe"^/    /local file buffer flag^/]^/float?: function ["Returns true if the value is this type" value [any-type!]]^/^/forall: native [^/    "Evaluates body for all values in a series"^/    'word [word!] "Word referring to series to iterate over"^/    body [block!]^/]^/foreach: native [^/    "Evaluates body for each value in a series"^/    'word [word! block!] "Word, or words, to set on each iteration"^/    series [series! map!]^/    body [block!]^/]^/foreach-face: function [^/    {Evaluates body for each face in a face tree matching the condition}^/    face [object!] "Root face of the face tree"^/    body [block! function!] {Body block (`face` object) or function `func [face [object!]]`}^/    /with "Filter faces according to a condition"^/    spec [block! none!] "Condition applied to face object"^/    /post {Evaluates body for current face after processing its children}^/    /sub post? "Do not rebind body and spec, internal use only"^/    /local exec^/]^/forever: native [^/    "Evaluates body repeatedly forever"^/    body [block!]^/]^/form: action [^/    {Returns a user-friendly string representation of a value}^/    value [any-type!]^/    /part "Limit the length of the result"^/    limit [integer!]^/    return: [string!]^/]^/fourth: function ["Returns the fourth value in a series" s [series! tuple! date!]]^/frame-index?: routine [return: [integer!]]^/func: native [^/    "Defines a function with a given spec and body"^/    spec [block!]^/    body [block!]^/]^/function: native [^/    {Defines a function, making all set-words found in body, local}^/    spec [block!]^/    body [block!]^/    /extern "Exclude words that follow this refinement"^/]^/function?: function ["Returns true if the value is this type" value [any-type!]]^/get: native [^/    "Returns the value a word refers to"^/    word [any-word! any-path! object!]^/    /any {If word has no value, return UNSET rather than causing an error}^/    /case "Use case-sensitive comparison (path only)"^/    return: [any-type!]^/]^/get-caret-blink-time: routine [^/    return: [integer!]^/]^/get-current-dir: routine [{Returns the platform's current directory for the process}]^/get-current-screen: function [^/    {Returns the screen face of the Display where the mouse cursor is currently located}^/    return: [object!] "Screen face"^/    /local handle screen^/]^/get-env: native [^/    {Returns the value of an OS environment variable (for current process)}^/    var [any-string! any-word!] "Variable to get"^/    return: [string! none!]^/]^/get-face-pane: function [^/    "Returns the list of a container children or none"^/    face [object!] "Face container"^/    return: [block! none!]^/]^/get-focusable: function [^/    "Returns the next focusable face from a face tree"^/    faces [block!] "Position to start from in a face's pane"^/    /back "Search backward"^/    /local origin checks flags f pane p^/]^/get-path?: function ["Returns true if the value is this type" value [any-type!]]^/get-scroller: function [^/    "return a scroller object from a face"^/    face [object!]^/    orientation [word!]^/    return: [object!]^/]^/get-sys-words: function [test [function!]]^/get-word?: function ["Returns true if the value is this type" value [any-type!]]^/greater-or-equal?: native [^/    {Returns TRUE if the first value is greater than or equal to the second}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/greater?: native [^/    {Returns TRUE if the first value is greater than the second}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/^/halt: function ["Stops evaluation and returns to the input prompt"]^/handle?: function ["Returns true if the value is this type" value [any-type!]]^/has: native [^/    {Defines a function with local variables, but no arguments}^/    vars [block!]^/    body [block!]^/]^/hash?: function ["Returns true if the value is this type" value [any-type!]]^/head: action [^/    "Returns a series at its first index"^/    series [series! port!]^/    return: [series! port!]^/]^/head?: action [^/    "Returns true if a series is at its first index"^/    series [series! port!]^/    return: [logic!]^/]^/help: function [^/    {Displays information about functions, values, objects, and datatypes.}^/    'word [any-type!]^/]^/^/help-string: function [^/    {Returns information about functions, values, objects, and datatypes.}^/    'word [any-type!] "Omit the word arg for HELP usage."^/    /local ref-given? value^/]^/hex-to-rgb: function [^/    {Converts a color in hex format to a tuple value; returns NONE if it fails}^/    hex [issue!] "Accepts #rgb, #rrggbb, #rrggbbaa"^/    return: [tuple! none!]^/    /local str bin^/]^/^/if: native [^/    {If conditional expression is truthy, evaluate block; else return NONE}^/    cond [any-type!]^/    then-blk [block!]^/]^/image?: function ["Returns true if the value is this type" value [any-type!]]^/immediate?: function [{Returns true if the value is any type of immediate} value [any-type!]]^/in: native [^/    {Returns the given word bound to the object's context}^/    object [any-object! any-function!]^/    word [any-word! refinement!]^/]^/index?: action [^/    {Returns the current index of series relative to the head, or of word in a context}^/    series [series! port! any-word!]^/    return: [integer!]^/]^/input: function ["Wait for console user input" return: [string!]]^/insert: action [^/    {Inserts value(s) at series index; returns series past the insertion}^/    series [series! port! bitset!]^/    value [any-type!]^/    /part "Limit the number of values inserted"^/    length [number! series!]^/    /only {Insert block types as single values (overrides /part)}^/    /dup "Duplicate the inserted values"^/    count [integer!]^/    return: [series! port! bitset!]^/]^/insert-event-func: function [^/    {Adds a function to monitor global events. Returns the function}^/    name [word!]^/    fun [block! function!] "A function or a function body block"^/    /local svh^/]^/integer?: function ["Returns true if the value is this type" value [any-type!]]^/intersect: native [^/    "Returns the intersection of two data sets"^/    set1 [block! hash! string! bitset! typeset!]^/    set2 [block! hash! string! bitset! typeset!]^/    /case "Use case-sensitive comparison"^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    return: [block! hash! string! bitset! typeset!]^/]^/is: function []^/issue?: function ["Returns true if the value is this type" value [any-type!]]^/keys-of: function [{Returns the list of words of a value that supports reflection} value]^/last: function ["Returns the last value in a series" s [series! tuple!]]^/last-lf?: routine ["Internal Use Only"]^/last?: function [^/    "Returns TRUE if the series length is 1"^/    series [series!]^/]^/layout: function [^/    [no-trace]^/    {Return a face with a pane built from a VID description}^/    spec [block!] "Dialect block of styles, attributes, and layouts"^/    /tight "Zero offset and origin"^/    /options^/    user-opts [block!] "Optional features in [name: value] format"^/    /flags^/    flgs [block! word!] "One or more window flags"^/    /only "Returns only the pane block"^/    /parent^/    panel [object!]^/    divides [integer! none!]^/    /styles "Use an existing styles list"^/    css [block!] "Styles list"^/    /local axis anti^/    background! list reactors local-styles pane-size direction align begin size max-sz current global? below? origin spacing top-left bound cursor opts opt-words re-align sz words reset focal-face svmp pad value anti2 at-offset later? name styling? style styled? st actors face h pos styled w blk vid-align prev mar divide? index dir pad2 image^/]^/length?: action [^/    {Returns the number of values in the series, from the current index to the tail}^/    series [series! port! bitset! map! tuple! none!]^/    return: [integer! none!]^/]^/lesser-or-equal?: native [^/    {Returns TRUE if the first value is less than or equal to the second}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/lesser?: native [^/    {Returns TRUE if the first value is less than the second}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/link-sub-to-parent: function ["Internal Use Only" face [object!] type [word!] old new^//local parent]^/link-tabs-to-parent: function [^/    "Internal Use Only"^/    face [object!]^/    /init "Force /show of first tab"^/    /local faces visible?^/]^/list-dir: function [^/    {Displays a list of files and directories from given folder or current one}^/    dir [any-type!] "Folder to list"^/    /col "Forces the display in a given number of columns"^/    n [integer!] "Number of columns"^/    /local list limit max-sz name^/]^/list-env: native [^/    {Returns a map of OS environment variables (for current process)}^/    return: [map!]^/]^/lit-path?: function ["Returns true if the value is this type" value [any-type!]]^/lit-word?: function ["Returns true if the value is this type" value [any-type!]]^/ll: function [{Display a single column directory listing, for the current dir if none is given} 'dir [any-type!]]^/load: function [^/    {Returns a value or block of values by reading and evaluating a source}^/    source [file! url! string! binary!]^/    /header "TBD"^/    /all {Load all values, returns a block. TBD: Don't evaluate Red header}^/    /trap {Load all values, returns [[values] position error]}^/    /next {Load the next value only, updates source series word}^/    position [word!] "Word updated with new series position"^/    /part "Limit to a length or position"^/    length [integer! string!]^/    /into {Put results in out block, instead of creating a new block}^/    out [block!] "Target block for results"^/    /as {Specify the type of data; use NONE to load as code}^/    type [word! none!] "E.g. bmp, gif, jpeg, png, redbin, json, csv"^/    /local codec suffix name mime pre-load^/]^/load-csv: function [^/    {Converts CSV text to a block of rows, where each row is a block of fields.}^/    data [string!] "Text CSV data to load"^/    /with^/    delimiter [char! string!] "Delimiter to use (default is comma)"^/    /header {Treat first line as header; implies /as-columns if /as-records is not used}^/    /as-columns {Returns named columns; default names if /header is not used}^/    /as-records {Returns records instead of rows; default names if /header is not used}^/    /flat {Returns a flat block; you need to know the number of fields}^/    /trim "Ignore spaces between quotes and delimiter"^/    /quote^/    qt-char [char!] {Use different character for quotes than double quote (")}^/    /local disallowed refs output out-map longest line value record newline quotchars valchars quoted-value char normal-value s e single-value values add-value add-line length index line-rule init parsed? mark key-index key^/]^/load-json: function [^/    "Convert a JSON string to Red data"^/    input [string!] "The JSON string"^/]^/load-thru: function [^/    "Loads a remote file through local disk cache"^/    url [url!] "Remote file address"^/    /update "Force a cache update"^/    /as {Specify the type of data; use NONE to load as code}^/    type [word! none!] "E.g. bmp, gif, jpeg, png"^/    /local path file^/]^/log-10: native [^/    "Returns the base-10 logarithm"^/    value [float! integer! percent!]^/    return: [float!]^/]^/log-2: native [^/    "Return the base-2 logarithm"^/    value [float! integer! percent!]^/    return: [float!]^/]^/log-e: native [^/    {Returns the natural (base-E) logarithm of the given value}^/    value [float! integer! percent!]^/    return: [float!]^/]^/logic?: function ["Returns true if the value is this type" value [any-type!]]^/loop: native [^/    "Evaluates body a number of times"^/    count [integer! float!]^/    body [block!]^/]^/lowercase: native [^/    "Converts string of characters to lowercase"^/    string [any-string! char!] "Value to convert (modified when series)"^/    /part "Limits to a given length or position"^/    limit [number! any-string!]^/    return: [any-string! char!]^/]^/ls: function [{Display a directory listing, for the current dir if none is given} 'dir [any-type!]]^/make: action [^/    {Returns a new value made from a spec for that value's type}^/    type [any-type!] "The datatype, an example or prototype value"^/    spec [any-type!] "The specification of the new value"^/    return: [any-type!] "Returns the specified datatype"^/]^/make-dir: function [^/    {Creates the specified directory. No error if already exists}^/    path [file!]^/    /deep "Create subdirectories too"^/    /local dirs end created dir^/]^/make-face: function [^/    {Make a face from a given style name or example face}^/    style [word!] "A face type"^/    /spec^/    blk [block!] "Spec block of face options expressed in VID"^/    /offset^/    xy [pair!] "Offset of the face"^/    /size^/    wh [pair!] "Size of the face"^/    /local^/    svv face styles model opts css^/]^/map?: function ["Returns true if the value is this type" value [any-type!]]^/math: function [^/    "Evaluates expression using math precedence rules"^/    datum [block! paren!] "Expression to evaluate"^/    /safe "Returns NONE on error"^/    /local match^/    order infix tally enter recur count operator^/]^/max: native [^/    "Returns the greater of the two values"^/    value1 [scalar! series!]^/    value2 [scalar! series!]^/]^/metrics?: function [^/    {Returns a pair! value in the type metrics for the argument face}^/    face [object!] "Face object to query"^/    type [word!] "Metrics type: 'paddings or 'margins"^/    /total "Return the addition of metrics along an axis"^/    axis [word!] "Axis to use for addition: 'x or 'y"^/    /local res^/]^/min: native [^/    "Returns the lesser of the two values"^/    value1 [scalar! series!]^/    value2 [scalar! series!]^/]^/mod: function [^/    "Compute a nonnegative remainder of A divided by B"^/    a [number! money! char! pair! tuple! vector! time!]^/    b [number! money! char! pair! tuple! vector! time!] "Must be nonzero"^/    return: [number! money! char! pair! tuple! vector! time!]^/    /local r^/]^/modify: action [^/    "Change mode for target aggregate value"^/    target [object! series! bitset!]^/    field [word!]^/    value [any-type!]^/    /case "Perform a case-sensitive lookup"^/]^/modulo: function [^/    {Wrapper for MOD that handles errors like REMAINDER. Negligible values (compared to A and B) are rounded to zero}^/    a [number! money! char! pair! tuple! vector! time!]^/    b [number! money! char! pair! tuple! vector! time!]^/    return: [number! money! char! pair! tuple! vector! time!]^/    /local r^/]^/mold: action [^/    {Returns a source format string representation of a value}^/    value [any-type!]^/    /only "Exclude outer brackets if value is a block"^/    /all "TBD: Return value in loadable format"^/    /flat "Exclude all indentation"^/    /part "Limit the length of the result"^/    limit [integer!]^/    return: [string!]^/]^/money?: function ["Returns true if the value is this type" value [any-type!]]^/move: action [^/    {Moves one or more elements from one series to another position or series}^/    origin [series! port!]^/    target [series! port!]^/    /part "Limit the number of values inserted"^/    length [integer!]^/    return: [series! port!]^/]^/multiply: action [^/    "Returns the product of two values"^/    value1 [number! money! char! pair! tuple! vector! time! any-point!] "The multiplicand"^/    value2 [number! money! char! pair! tuple! vector! time! any-point!] "The multiplier"^/    return: [number! money! char! pair! tuple! vector! time! any-point!] "The product"^/]^/NaN?: native [^/    "Returns TRUE if the number is Not-a-Number"^/    value [number!]^/    return: [logic!]^/]^/native?: function ["Returns true if the value is this type" value [any-type!]]^/negate: action [^/    "Returns the opposite (additive inverse) value"^/    number [number! money! bitset! pair! time! any-point!]^/    return: [number! money! bitset! pair! time! any-point!]^/]^/negative?: native [^/    "Returns TRUE if the number is negative"^/    number [number! money! time!]^/    return: [logic!]^/]^/new-line: native [^/    {Sets or clears the new-line marker within a list series}^/    position [any-list!] "Position to change marker (modified)"^/    value [logic!] "Set TRUE for newline"^/    /all "Set/clear marker to end of series"^/    /skip {Set/clear marker periodically to the end of the series}^/    size [integer!]^/    return: [any-list!]^/]^/new-line?: native [^/    {Returns the state of the new-line marker within a list series}^/    position [any-list!] "Position to check marker"^/    return: [logic!]^/]^/next: action [^/    "Returns a series at the next index"^/    series [series! port!]^/    return: [series! port!]^/]^/no-react: function [^/    {Evaluates a block with all previously defined reactions disabled}^/    body [block!] "Code block to evaluate"^/    /local result^/]^/none?: function ["Returns true if the value is this type" value [any-type!]]^/normalize-dir: function [^/    "Returns an absolute directory spec"^/    dir [file! word! path!]^/]^/not: native [^/    {Returns the logical complement of a value (truthy or falsy)}^/    value [any-type!]^/]^/not-equal?: native [^/    "Returns TRUE if two values are not equal"^/    value1 [any-type!]^/    value2 [any-type!]^/]^/now: native [^/    "Returns date and time"^/    /year "Returns year only"^/    /month "Returns month only"^/    /day "Returns day of the month only"^/    /time "Returns time only"^/    /zone "Returns time zone offset from UTC (GMT) only"^/    /date "Returns date only"^/    /weekday {Returns day of the week as integer (Monday is day 1)}^/    /yearday "Returns day of the year (Julian)"^/    /precise "High precision time"^/    /utc "Universal time (no zone)"^/    return: [date! time! integer!]^/]^/number?: function ["Returns true if the value is any type of number" value [any-type!]]^/object: function [^/    "Makes a new object from an evaluated spec"^/    spec [block!]^/]^/object?: function ["Returns true if the value is this type" value [any-type!]]^/odd?: action [^/    {Returns true if the number has a remainder of 1 when divided by 2}^/    number [number! money! char! time!]^/    return: [logic!]^/]^/offset-to-caret: function [^/    {Given a coordinate, returns the corresponding caret position}^/    face [object!]^/    pt [planar!]^/    return: [integer!]^/]^/offset-to-char: function [^/    {Given a coordinate, returns the corresponding character position}^/    face [object!]^/    pt [planar!]^/    return: [integer!]^/]^/offset?: function [^/    "Returns the offset between two series positions"^/    series1 [series!]^/    series2 [series!]^/]^/on-face-deep-change*: function ["Internal use only" owner word target action new index part state forced?^//local w diff? faces face modal? screen pane]^/op?: function ["Returns true if the value is this type" value [any-type!]]^/open: action [^/    {Opens a port; makes a new port from a specification if necessary}^/    port [port! file! url! block!]^/    /new "Create new file - if it exists, deletes it"^/    /read "Open for read access"^/    /write "Open for write access"^/    /seek "Optimize for random access"^/    /allow "Specificies right access attributes"^/    access [block!]^/]^/open?: action [^/    "Returns TRUE if port is open"^/    port [port!]^/]^/or~: action [^/    "Returns the first value ORed with the second"^/    value1 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/    value2 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/    return: [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/]^/os-info: routine [{Returns detailed operating system version information}]^/overlap?: function [^/    {Return TRUE if the two faces bounding boxes are overlapping}^/    A [object!] "First face"^/    B [object!] "Second face"^/    return: [logic!] "TRUE if overlapping"^/    /local A1 B1 A2 B2^/]^/pad: function [^/    "Pad a FORMed value on right side with spaces"^/    str "Value to pad, FORM it if not a string"^/    n [integer!] "Total size (in characters) of the new string"^/    /left "Pad the string on left side"^/    /with "Pad with char"^/    c [char!]^/    return: [string!] "Modified input string at head"^/]^/pair?: function ["Returns true if the value is this type" value [any-type!]]^/^/paren?: function ["Returns true if the value is this type" value [any-type!]]^/parse: native [^/    "Process a series using dialected grammar rules"^/    input [binary! any-block! any-string!]^/    rules [block!]^/    /case "Uses case-sensitive comparison"^/    /part "Limit to a length or position"^/    length [number! series!]^/    /trace^/    callback [function! [^/        event [word!]^/        match? [logic!]^/        rule [block!]^/        input [series!]^/        stack [block!]^/        return: [logic!]^/    ]]^/    return: [logic! block!]^/]^/parse-trace: function [^/    {Wrapper for parse/trace using the default event processor}^/    input [series!]^/    rules [block!]^/    /case "Uses case-sensitive comparison"^/    /part "Limit to a length or position"^/    limit [integer!]^/    return: [logic! block!]^/]^/path-thru: function [^/    {Returns the local disk cache path of a remote file}^/    url [url!] "Remote file address"^/    return: [file!]^/    /local so hash file path^/]^/path?: function ["Returns true if the value is this type" value [any-type!]]^/percent?: function ["Returns true if the value is this type" value [any-type!]]^/pick: action [^/    "Returns the series value at a given index"^/    series [series! port! bitset! pair! any-point! tuple! money! date! time! event!]^/    index [scalar! any-string! any-word! block! logic! time!]^/    return: [any-type!]^/]^/pick-stack: routine [^/    idx [integer!]^/]^/planar?: function ["Returns true if the value is any type of planar" value [any-type!]]^/point2D?: function ["Returns true if the value is this type" value [any-type!]]^/point3D?: function ["Returns true if the value is this type" value [any-type!]]^/poke: action [^/    {Replaces the series value at a given index, and returns the new value}^/    series [series! port! bitset!]^/    index [scalar! any-string! any-word! block! logic!]^/    value [any-type!]^/    return: [series! port! bitset!]^/]^/positive?: native [^/    "Returns TRUE if the number is positive"^/    number [number! money! time!]^/    return: [logic!]^/]^/power: action [^/    {Returns a number raised to a given power (exponent)}^/    number [number!] "Base value"^/    exponent [integer! float!] "The power (index) to raise the base value by"^/    return: [number!]^/]^/preprocessor: make object! [^/    exec: make object! [^/        config: make object! [^/            config-name: 'Windows^/            OS: 'Windows^/            OS-version: 0^/            ABI: none^/            link?: true^/            debug?: false^/            encap?: false^/            build-prefix: %""^/            build-basename: %/home/dk/static.red-lang.org/dl/auto/win/red-view-06mar26-698eac0d8.exe^/            build-suffix: none^/            format: 'PE^/            type: 'exe^/            target: 'IA-32^/            cpu-version: 6.0^/            verbosity: 0^/            sub-system: 'GUI^/            runtime?: true^/            use-natives?: false^/            debug-safe?: true^/            dev-mode?: false^/            need-main?: false^/            PIC?: false^/            base-address: none^/            dynamic-linker: none^/            syscall: 'Linux^/            export-ABI: none^/            stack-align-16?: false^/            literal-pool?: false^/            unicode?: false^/            red-pass?: true^/            red-only?: false^/            red-store-bodies?: true^/            red-strict-check?: true^/            red-tracing?: true^/            red-help?: true^/            redbin-compress?: false^/            legacy: none^/            gui-console?: true^/            libRed?: false^/            libRedRT?: false^/            libRedRT-update?: false^/            GUI-engine: 'native^/            draw-engine: none^/            modules: [View JSON CSV]^/            show: none^/            command-line: none^/            show-func-map?: false^/        ]^/    ]^/    protos: []^/    macros: [<none>]^/    stack: []^/    syms: []^/    depth: 0^/    active?: true^/    trace?: false^/    s: none^/    do-quit: func [][^/        case [^/            all [rebol system/options/args] [quit/return 1]^/            all [not rebol system/console] [throw/name 'halt-request 'console]^/            'else [halt]^/        ]^/    ]^/    throw-error: func [error [error!] cmd [issue!] code [block!] /local w][^/        prin ["*** Preprocessor Error in" mold cmd lf]^/        error/where: new-line/all reduce [cmd] no^/        print form :error^/        either system/console [throw/name 'halt-request 'console] [halt]^/    ]^/    syntax-error: func [s [block! paren!] e [block! paren!]][^/        print [^/            "*** Preprocessor Error: Syntax error^^/"^/            "*** Where:" trim/head mold/only copy/part s next e^/        ]^/        do-quit^/    ]^/    do-safe: func [code [block! paren!] /manual /with cmd [issue!] /local res t? src][^/        if t?: all [trace? not with] [^/            print [^/                "preproc: matched" mold/flat copy/part get code/2 get code/3 lf^/                "preproc: eval macro" copy/part mold/flat body-of first code 80^/            ]^/        ]^/        if error? set/any 'res try code [throw-error :res any [cmd #macro] code]^/        if all [^/            manual^/            any [^/                (type? src: get code/2) <> type? get/any 'res^/                not same? head src head get/any 'res^/            ]^/        ] [^/            print [^/                {*** Macro Error: [manual] macro not returning a position^^/}^/                "*** Where:" mold code^/            ]^/            do-quit^/        ]^/        if t? [print ["preproc: ==" mold get/any 'res]]^/        either unset? get/any 'res [[]] [:res]^/    ]^/    do-code: func [code [block! paren!] cmd [issue!] /local p][^/        clear syms^/        parse code [any [^/            p: set-word! (unless in exec p/1 [append syms p/1])^/            | skip^/        ]]^/        unless empty? syms [^/            exec: make exec append syms none^/            rebind-all^/        ]^/        do-safe/with bind to block! code exec cmd^/    ]^/    rebind-all: func [/local rule p][^/        protos: bind protos exec^/        parse macros rule: [^/            any [p: function! (bind body-of first p exec) | p: [block! | paren!] :p into rule | skip]^/        ]^/    ]^/    count-args: func [spec [block!] /block /local total pos][^/        total: either block [copy []] [0]^/        parse spec [^/            any [^/                pos: [word! | lit-word! | get-word!] (^/                    either block [append total type? pos/1] [total: total + 1]^/                )^/                | refinement! (return total)^/                | skip^/            ]^/        ]^/        total^/    ]^/    arg-mode?: func [spec [block!] idx [integer!]][^/        pick count-args/block spec idx^/    ]^/    func-arity?: func [spec [block!] /with path [path!] /block /local arity pos][^/        arity: either block [count-args/block spec] [count-args spec]^/        if path [^/            foreach word next path [^/                unless pos: find/tail spec to refinement! word [^/                    print [^/                        "*** Macro Error: unknown refinement^^/"^/                        "*** Where:" mold path^/                    ]^/                    do-quit^/                ]^/                either block^/                [append arity count-args/block pos]^/                [arity: arity + count-args pos]^/            ]^/        ]^/        arity^/    ]^/    value-path?: func [path [path!] /local value i item selectable][^/        selectable: make typeset! [^/            block! paren! path! lit-path! set-path! get-path!^/            object! port! error! map!^/        ]^/        repeat i length? path [^/            set/any 'value either i = 1 [get/any first path] [^/                set/any 'item pick path i^/                case [^/                    get-word? :item [set/any 'item get/any to word! item]^/                    paren? :item [set/any 'item do item]^/                ]^/                either integer? :item [pick value item] [select value :item]^/            ]^/            unless find selectable type? get/any 'value [^/                path: copy/part path i^/                break^/            ]^/        ]^/        reduce [path get/any 'value]^/    ]^/    fetch-next: func [code [block! paren!] /local i left item item2 value fn-spec path f-arity at-op? op-mode][^/        left: reduce [yes]^/        while [all [not tail? left not tail? code]] [^/            either not left/1 [^/                remove left^/            ] [^/                item: first code^/                f-arity: any [^/                    all [^/                        word? :item^/                        any-function? set/any 'value get/any :item^/                        func-arity?/block fn-spec: spec-of get/any :item^/                    ]^/                    all [^/                        path? :item^/                        set/any [path value] value-path? :item^/                        any-function? get/any 'value^/                        func-arity?/block/with^/                        fn-spec: spec-of :value^/                        at :item length? :path^/                    ]^/                ]^/                if at-op?: all [^/                    1 < length? code^/                    word? item2: second code^/                    op? get/any :item2^/                ] [^/                    if all [f-arity 1 < length? f-arity] [^/                        at-op?: word! = arg-mode? fn-spec 1^/                    ]^/                ]^/                case [^/                    at-op? [^/                        code: next code^/                        left/1: word! = arg-mode? spec-of get/any :item2 2^/                    ]^/                    f-arity [^/                        if op? get/any 'value [return skip code 2]^/                        remove left^/                        repeat i length? f-arity [insert at left i word! = f-arity/:i]^/                    ]^/                    not find [set-word! set-path!] type?/word item [^/                        remove left^/                    ]^/                ]^/            ]^/            code: next code^/        ]^/        code^/    ]^/    eval: func [code [block! paren!] cmd [issue!] /local after expr][^/        after: fetch-next code^/        expr: copy/part code after^/        if trace? [print ["preproc:" mold cmd mold expr]]^/        expr: do-code expr cmd^/        if trace? [print ["preproc: ==" mold expr]]^/        reduce [expr after]^/    ]^/    do-macro: func [name pos [block! paren!] arity [integer!] /local cmd saved p v res][^/        depth: depth + 1^/        saved: s^/        parse next pos [arity [s: macros | skip]]^/        cmd: make block! 1^/        append cmd name^/        insert/part tail cmd next pos arity^/        if trace? [print ["preproc: eval macro" mold cmd]]^/        p: next cmd^/        forall p [^/            switch type?/word v: p/1 [^/                word! [change p to lit-word! v]^/                path! [change/only p to lit-path! v]^/            ]^/        ]^/        if unset? set/any 'res do bind cmd exec [^/            print ["*** Macro Error: no value returned by" name "macro^^/"]^/            do-quit^/        ]^/        if trace? [print ["preproc: ==" mold :res]]^/        s: saved^/        s/1: :res^/        if positive? depth: depth - 1 [^/            saved: s^/            parse s [s: macros]^/            s: saved^/        ]^/        s/1^/    ]^/    register-macro: func [spec [block!] /local cnt rule p name macro pos valid? named?][^/        named?: set-word? spec/1^/        cnt: 0^/        rule: make block! 10^/        valid?: parse spec/3 [^/            any [^/                opt string!^/                opt block!^/                [word! (cnt: cnt + 1) | /local any word!]^/                opt [^/                    p: block! :p into [some word!]^/                ]^/            ]^/        ]^/        if any [^/            not valid?^/            all [^/                not named?^/                any [cnt <> 2 all [block? spec/1 empty? spec/1]]^/            ]^/        ] [^/            print [^/                "*** Macro Error: invalid specification^^/"^/                "*** Where:" mold copy/part spec 3^/            ]^/            do-quit^/        ]^/        either named? [^/            repend rule [^/                name: to lit-word! spec/1^/                to-paren compose [change/part s do-macro (:name) s (cnt) (cnt + 1)]^/                to get-word! 's^/            ]^/            append protos copy/part spec 4^/        ] [^/            macro: do bind copy/part next spec 3 exec^/            repend rule [^/                to set-word! 's^/                spec/1^/                to set-word! 'e^/                to-paren compose/deep either all [^/                    block? spec/3/1 find spec/3/1 'manual^/                ] [^/                    [s: do-safe/manual [(:macro) s e]]^/                ] [^/                    [s: change/part s do-safe [(:macro) s e] e]^/                ]^/                to get-word! 's^/            ]^/        ]^/        pos: tail macros^/        either tag? macros/1 [remove macros] [insert macros '|]^/        insert macros rule^/        new-line pos yes^/        exec: make exec protos^/        rebind-all^/    ]^/    reset: func [job [object! none!]][^/        exec: do [context [config: job]]^/        clear protos^/        insert clear macros <none>^/    ]^/    expand: func [^/        code [block! paren!] job [object! none!]^/        /clean^/        /local rule e pos cond value then else cases body keep? expr src saved file new^/    ][^/        either clean [reset job] [exec/config: job]^/        rule: [^/            any [^/                s: macros^/                | 'routine 2 skip^/                | #system skip^/                | #system-global skip^/                | s: #include (^/                    if active? [^/                        either all [not Rebol system/state/interpreted?] [^/                            saved: s^/                            attempt [expand load s/2 job]^/                            s: saved^/                            s/1: 'do^/                        ] [^/                            attempt [^/                                src: red/load-source/hidden clean-path join red/main-path s/2^/                                expand src job^/                            ]^/                        ]^/                    ]^/                )^/                | s: #include-binary [file! | string!] (^/                    if active? [^/                        either all [not Rebol system/state/interpreted?] [^/                            s/1: 'read/binary^/                            if string? s/2 [s/2: to-red-file s/2]^/                        ] [^/                            file: either string? s/2 [to-rebol-file s/2] [s/2]^/                            file: clean-path join red/main-path file^/                            change/part s read/binary file 2^/                        ]^/                    ]^/                )^/                | s: #if (set [cond e] eval next s s/1) :e [set then block! | (syntax-error s e)] e: (^/                    if active? [either cond [change/part s then e] [remove/part s e]]^/                ) :s^/                | s: #either (set [cond e] eval next s s/1) :e^/                [set then block! set else block! | (syntax-error s e)] e: (^/                    if active? [either cond [change/part s then e] [change/part s else e]]^/                ) :s^/                | s: #switch (set [cond e] eval next s s/1) :e [set cases block! | (syntax-error s e)] e: (^/                    if active? [^/                        body: any [select cases cond select cases #default]^/                        either body [change/part s body e] [remove/part s e]^/                    ]^/                ) :s^/                | s: #case [set cases block! | e: (syntax-error s e)] e: (^/                    if active? [^/                        until [^/                            set [cond cases] eval cases s/1^/                            any [cond tail? cases: next cases]^/                        ]^/                        either cond [change/part s cases/1 e] [remove/part s e]^/                    ]^/                ) :s^/                | s: #do (keep?: no) opt ['keep (keep?: yes)] [block! | (syntax-error s next s)] e: (^/                    if active? [^/                        pos: pick [3 2] keep?^/                        if trace? [print ["preproc: eval" mold s/:pos]]^/                        saved: s^/                        expr: do-code s/:pos s/1^/                        s: saved^/                        if all [keep? trace?] [print ["preproc: ==" mold expr]]^/                        either keep? [s: change/part s :expr e] [remove/part s e]^/                    ]^/                ) :s^/                | s: #local [block! | (syntax-error s next s)] e: (^/                    repend stack [negate length? macros tail protos]^/                    saved: s^/                    new: expand s/2 job^/                    s: saved^/                    change/part s new e^/                    clear take/last stack^/                    remove/part macros skip tail macros take/last stack^/                    if tail? next macros [macros/1: <none>]^/                ) :s^/                | s: #reset (reset job remove s) :s^/                | s: #trace [[^/                    ['on (trace?: on) | 'off (trace?: off)] (remove/part s 2) :s^/                ] | (syntax-error s next s)]^/                | s: #process [[^/                    'on (active?: yes remove/part s 2) :s^/                    | 'off (active?: no remove/part s 2) :s [to #process | to end (active?: yes)]^/                ] | (syntax-error s next s)]^/                | s: #macro [^/                    [set-word! | word! | lit-word! | block!] ['func | 'function] block! block!^/                    | (syntax-error s skip s 4)^/                ] e: (^/                    register-macro next s^/                    remove/part s e^/                ) :s^/                | pos: [block! | paren!] :pos into rule^/                | skip^/            ]^/        ]^/        unless Rebol [rule/1: 'while]^/        parse code rule^/        code^/    ]^/]^/prin: native [^/    "Outputs a value"^/    value [any-type!]^/]^/print: native [^/    "Outputs a value followed by a newline"^/    value [any-type!]^/]^/probe: function [^/    "Returns a value after printing its molded form"^/    value [any-type!]^/]^/profile: function [^/    {Profile the argument code, counting calls and their cumulative duration, then print a report}^/    code [any-type!] "Code to profile"^/    /by^/    cat [word!] "Sort by: 'name, 'count, 'time"^/    /local saved rank name cnt duration^/]^/put: action [^/    {Replaces the value following a key, and returns the new value}^/    series [series! port! map! object!]^/    key [scalar! any-string! all-word! binary!]^/    value [any-type!]^/    /case "Perform a case-sensitive search"^/    return: [series! port! map! object!]^/]^/pwd: function [{Displays the active directory path (Print Working Dir)}]^/q: function [^/    "Stops evaluation and exits the program"^/    /return status [integer!] "Return an exit status"^/]^/query: action [^/    "Returns information about a file"^/    target [file! port!]^/]^/quit: function [^/    "Stops evaluation and exits the program"^/    /return status [integer!] "Return an exit status"^/]^/quit-return: routine [^/    {Stops evaluation and exits the program with a given status}^/    status [integer!] "Process termination value to return"^/]^/quote: function [^/    "Return but don't evaluate the next value"^/    :value [any-type!]^/]^/random: action [^/    {Returns a random value of the same datatype; or shuffles series}^/    value "Maximum value of result (modified when series)"^/    /seed "Restart or randomize"^/    /secure "Returns a cryptographically secure random number"^/    /only "Pick a random value from a series"^/    return: [any-type!]^/]^/react: function [^/    {Defines a new reactive relation between two or more objects}^/    reaction [block! function!] "Reactive relation"^/    /link "Link objects together using a reactive relation"^/    objects [block!] "Objects to link together"^/    /unlink "Removes an existing reactive relation"^/    src [word! object! block!] "'all word, or a reactor or a list of reactors"^/    /later "Run the reaction on next change instead of now"^/    /with "Specifies an optional face object (internal use)"^/    ctx [object! set-word! none!] "Optional context for VID faces or target set-word"^/    return: [block! function! none!] {The reactive relation or NONE if no relation was processed}^/    /local objs found? rule item pos obj^/]^/react?: function [^/    {Returns a reactive relation if an object's field is a reactive source}^/    reactor [object!] "Object to check"^/    field [word!] "Field to check"^/    /target {Check if it's a target of an `is` reaction instead of a source}^/    return: [block! function! word! none!] "Returns reaction, type or NONE"^/    /local pos^/]^/reactor: function [spec [block!]]^/^/read: action [^/    "Reads from a file, URL, or other port"^/    source [file! url! port!]^/    /part {Partial read a given number of units (source relative)}^/    length [number!]^/    /seek "Read from a specific position (source relative)"^/    index [number!]^/    /binary "Preserves contents exactly"^/    /lines "Convert to block of strings"^/    /info^/    /as {Read with the specified encoding, default is 'UTF-8}^/    encoding [word!]^/]^/read-clipboard: routine [^/    "Return the contents of the system clipboard"^/    return: [any-type!] {false on failure, none if empty, otherwise: string!, block! of files!, or an image!}^/]^/read-thru: function [^/    "Reads a remote file through local disk cache"^/    url [url!] "Remote file address"^/    /update "Force a cache update"^/    /binary "Use binary mode"^/    /local path data^/]^/recycle: native [^/    {Recycles unused memory and returns memory amount still in use}^/    /on "Turns on garbage collector; returns nothing"^/    /off "Turns off garbage collector; returns nothing"^/    /info "Returns the number of GC passes since beginning"^/    return: [integer! unset!]^/]^/^/red-complete-input: function [^/    str [string!]^/    console? [logic!]^/    /local^/    word ptr result sys-word delim? len insert?^/    start end delimiters d w change?^/]^/reduce: native [^/    {Returns a copy of a block, evaluating all expressions}^/    value [any-type!]^/    /into {Put results in out block, instead of creating a new block}^/    out [any-block!] "Target block for results, when /into is used"^/]^/ref?: function ["Returns true if the value is this type" value [any-type!]]^/refinement?: function ["Returns true if the value is this type" value [any-type!]]^/reflect: action [^/    {Returns internal details about a value via reflection}^/    value [any-type!]^/    field [word!] {spec, body, words, etc. Each datatype defines its own reflectors}^/]^/register-scheme: function [^/    "Registers a new scheme"^/    spec [object!] "Scheme definition"^/    /native^/    dispatch [handle!]^/]^/rejoin: function [^/    "Reduces and joins a block of values."^/    block [block!] "Values to reduce and join"^/]^/relate: function [^/    {Defines a reactive relation whose result is assigned to a word}^/    'field [set-word!] {Set-word which will get set to the result of the reaction}^/    reaction [block!] "Reactive relation"^/    /local obj rule item^/]^/remainder: action [^/    {Returns what is left over when one value is divided by another}^/    value1 [number! money! char! pair! any-point! tuple! vector! time!] "The dividend (numerator)"^/    value2 [number! money! char! pair! any-point! tuple! vector! time!] "The divisor (denominator)"^/    return: [number! money! char! pair! any-point! tuple! vector! time!] "The remainder"^/]^/remove: action [^/    {Returns the series at the same index after removing a value}^/    series [series! port! bitset! map! none!]^/    /part {Removes a number of values, or values up to the given series index}^/    length [number! char! series!]^/    /key "Removes a key in map"^/    key-arg [scalar! any-string! any-word! binary! block!]^/    return: [series! port! bitset! map! none!]^/]^/remove-each: native [^/    {Removes values for each block that returns truthy value}^/    'word [word! block!] "Word or block of words to set each time"^/    data [series!] "The series to traverse (modified)"^/    body [block!] "Block to evaluate (return truthy value to remove)"^/]^/remove-event-func: function [^/    "Removes an event function previously added"^/    id [word! function!] "Handler name or function reference"^/    /local svh pos^/]^/rename: action [^/    "Rename a file"^/    from [port! file! url!]^/    to [port! file! url!]^/]^/repeat: native [^/    {Evaluates body a number of times, tracking iteration count}^/    'word [word!] "Iteration counter; not local to loop"^/    value [integer! float!] "Number of times to evaluate body"^/    body [block!]^/]^/repend: function [^/    {Appends a reduced value to a series and returns the series head}^/    series [series!]^/    value^/    /only "Appends a block value as a block"^/]^/replace: function [^/    "Replaces values in a series, in place"^/    series [any-block! any-string! binary! vector!] "The series to be modified"^/    pattern "Specific value or parse rule pattern to match"^/    value "New value, replaces pattern in the series"^/    /all "Replace all occurrences, not just the first"^/    /deep "Replace pattern in all sub-lists as well"^/    /case "Case-sensitive replacement"^/    /local parse? form? quote? deep? rule many? size seek active?^/]^/request-dir: function [^/    {Asks user to select a directory and returns full directory path (or block of paths)}^/    /title "Window title"^/    text [string!]^/    /dir "Set starting directory"^/    name [string! file!]^/    /filter "TBD: Block of filters (filter-name filter)"^/    list [block!]^/    /keep "Keep previous directory path"^/    /multi {TBD: Allows multiple file selection, returned as a block}^/]^/request-file: function [^/    {Asks user to select a file and returns full file path (or block of paths)}^/    /title "Window title"^/    text [string!]^/    /file "Default file name or directory"^/    name [string! file!]^/    /filter "Block of filters (filter-name filter)"^/    list [block!]^/    /save "File save mode"^/    /multi {Allows multiple file selection, returned as a block}^/]^/request-font: function [^/    "Requests a font object"^/    /font "Sets the selected font"^/    ft [object!]^/    /mono "Show monospaced font only"^/]^/return: native [^/    "Returns a value from a function"^/    value [any-type!]^/]^/reverse: action [^/    {Reverses the order of elements; returns at same position}^/    series [series! port! pair! any-point! tuple!]^/    /part "Limits to a given length or position"^/    length [number! series!]^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    return: [series! port! pair! any-point! tuple!]^/]^/^/round: action [^/    {Returns the nearest integer. Halves round up (away from zero) by default}^/    n [number! money! time! pair! any-point!]^/    /to {Return the nearest multiple of the scale parameter}^/    scale [number! money! time! pair! any-point!] "If zero, returns N unchanged"^/    /even "Halves round toward even results"^/    /down {Round toward zero, ignoring discarded digits. (truncate)}^/    /half-down "Halves round toward zero"^/    /floor "Round in negative direction"^/    /ceiling "Round in positive direction"^/    /half-ceiling "Halves round in positive direction"^/]^/routine: function [{Defines a function with a given Red spec and Red/System body} spec [block!] body [block!]]^/routine?: function ["Returns true if the value is this type" value [any-type!]]^/rtd-layout: function [^/    "Returns a rich-text face from a RTD source code"^/    spec [block!] "RTD source code"^/    /only "Returns only [text data] facets"^/    /with "Populate an existing face object"^/    face [object!] "Face object to populate"^/    return: [object! block!]^/]^/same?: native [^/    "Returns TRUE if two values have the same identity"^/    value1 [any-type!]^/    value2 [any-type!]^/]^/save: function [^/    {Saves a value, block, or other data to a file, URL, binary, or string}^/    where [file! url! string! binary! none!] "Where to save"^/    value [any-type!] "Value(s) to save"^/    /header {Provide a Red header block (or output non-code datatypes)}^/    header-data [block! object!]^/    /all "TBD: Save in serialized format"^/    /length {Save the length of the script content in the header}^/    /as {Specify the format of data; use NONE to save as plain text}^/    format [word! none!] "E.g. bmp, gif, jpeg, png, redbin, json, csv"^/    /local dst codec data suffix find-encoder? name only pos header-str k v^/]^/scalar?: function ["Returns true if the value is any type of scalar" value [any-type!]]^/scan: function [^/    {Returns the guessed type of the first serialized value from the input}^/    buffer [binary! string!] "Input UTF-8 buffer or string"^/    /next {Returns both the type and the input after the value}^/    /fast "Fast scanning, returns best guessed type"^/    return: [datatype! none!] {Recognized or guessed type, or NONE on empty input}^/]^/^/second: function ["Returns the second value in a series" s [series! tuple! pair! any-point! date! time!]]^/select: action [^/    {Find a value in a series and return the next value, or NONE}^/    series [series! any-object! map! none!]^/    value [any-type!]^/    /part "Limit the length of the search"^/    length [number! series!]^/    /only "Treat a series search value as a single value"^/    /case "Perform a case-sensitive search"^/    /same {Use "same?" as comparator}^/    /any "TBD: Use * and ? wildcards in string searches"^/    /with "TBD: Use custom wildcards in place of * and ?"^/    wild [string!]^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    /last "Find the last occurrence of value, from the tail"^/    /reverse {Find the last occurrence of value, from the current index}^/    return: [any-type!]^/]^/series?: function ["Returns true if the value is any type of series" value [any-type!]]^/set: native [^/    "Sets the value(s) one or more words refer to"^/    word [any-word! block! object! any-path!] "Word, object, map path or block of words to set"^/    value [any-type!] "Value or block of values to assign to words"^/    /any {Allow UNSET as a value rather than causing an error}^/    /case "Use case-sensitive comparison (path only)"^/    /only {Block or object value argument is set as a single value}^/    /some {None values in a block or object value argument, are not set}^/    return: [any-type!]^/]^/set-current-dir: routine ["Sets the platform's current process directory" path [file!]]^/set-env: native [^/    {Sets the value of an operating system environment variable (for current process)}^/    var [any-string! any-word!] "Variable to set"^/    value [string! none!] "Value to set, or NONE to unset it"^/]^/set-flag: function [^/    {Sets (or clears) a flag in a face object; Returns the /flags facet value}^/    face [object!] "Face where flag to set/clear"^/    flag [any-type!] "Flag to set/clear"^/    /clear "Clears the flag instead of setting it"^/    /toggle "Set it if unset, clears it otherwise"^/    /local flags pos^/]^/set-focus: function [^/    "Sets the focus on the argument face"^/    face [object!]^/    /local p^/]^/set-path?: function ["Returns true if the value is this type" value [any-type!]]^/set-quiet: routine [^/    {Set an object's field to a value without triggering eventual object's events}^/    word [any-type!]^/    value [any-type!]^/    return: [any-type!]^/]^/set-slot-quiet: routine [^/    {Set a value in series without triggering eventual owner's events}^/    series [any-type!]^/    value [any-type!]^/]^/set-word?: function ["Returns true if the value is this type" value [any-type!]]^/shift: native [^/    {Perform a bit shift operation. Right shift (decreasing) by default}^/    data [integer!]^/    bits [integer!]^/    /left "Shift bits to the left (increasing)"^/    /logical "Use logical shift (unsigned, fill with zero)"^/    return: [integer!]^/]^/shift-left: routine ["Shift bits to the left" data [integer!] bits [integer!]]^/shift-logical: routine ["Shift bits to the right (unsigned)" data [integer!] bits [integer!]]^/shift-right: routine ["Shift bits to the right" data [integer!] bits [integer!]]^/show: function [^/    "Display a new face or update it"^/    face [object! block!] "Face object to display"^/    /with "Link the face to a parent face"^/    parent [object!] "Parent face to link to"^/    /force "For internal use only!"^/    return: [logic!] "true if success"^/    /local show? f pending owner word target action new index part state handle new? p field pane^/]^/show-memory-stats: function [data [block!]^//local class used total i c frm unit]^/sign?: native [^/    {Returns sign of N as 1, 0, or -1 (to use as a multiplier)}^/    number [number! money! time!]^/    return: [integer!]^/]^/sin: function [^/    "Returns the trigonometric sine"^/    angle [float!] "Angle in radians"^/]^/sine: native [^/    "Returns the trigonometric sine"^/    angle [float! integer!]^/    /radians "DEPRECATED: use `sin` native instead"^/    return: [float!]^/]^/single?: function [^/    "Returns TRUE if the series length is 1"^/    series [series!]^/]^/size-text: function [^/    "Returns the area size of the text in a face"^/    face [object!] "Face containing the text to size"^/    /with "Provide a text string instead of face/text"^/    text [string!] "Text to measure"^/    return: [point2D! none!] "Return the text's size or NONE if failed"^/    /local h^/]^/size?: native [^/    "Returns the size of a file content"^/    file [file!]^/    return: [integer! none!]^/]^/skip: action [^/    "Returns the series relative to the current index"^/    series [series! port!]^/    offset [integer! pair!]^/    return: [series! port!]^/]^/sort: action [^/    {Sorts a series (modified); default sort order is ascending}^/    series [series! port!]^/    /case "Perform a case-sensitive sort"^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    /compare "Comparator offset, block (TBD) or function"^/    comparator [integer! block! any-function!]^/    /part "Sort only part of a series"^/    length [number! series!]^/    /all "Compare all fields (used with /skip)"^/    /reverse "Reverse sort order"^/    /stable "Stable sorting"^/    return: [series!]^/]^/source: function [^/    "Print the source of a function"^/    'word [word! path!] "The name of the function"^/    /local val^/]^/spec-of: function [{Returns the spec of a value that supports reflection} value]^/split: function [^/    {Break a string series into pieces using the provided delimiters}^/    series [any-string!] dlm [string! char! bitset!] /local s^/    num^/]^/split-path: function [^/    [no-trace]^/    {Splits a file or URL path. Returns a block containing path and target}^/    target [file! url!]^/    /local dir pos^/]^/sqrt: function [^/    "Returns the square root of a number"^/    number [float! integer! percent!]^/    return: [float!]^/]^/square-root: native [^/    "Returns the square root of a number"^/    value [float! integer! percent!]^/    return: [float!]^/]^/stack-size?: routine [return: [integer!]]^/stats: native [^/    "Returns interpreter statistics"^/    /show "TBD:"^/    /info {Return detailed info: nodes/series/big x free/used/total, total, low-level heap}^/    return: [integer! block!]^/]^/stop-events: function [^/    "Stop the last opened event loop"^/]^/stop-reactor: function [^/    face [object!]^/    /deep^/    /local list pos f^/]^/strict-equal?: native [^/    {Returns TRUE if two values are equal, and also the same datatype}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/string?: function ["Returns true if the value is this type" value [any-type!]]^/subtract: action [^/    "Returns the difference between two values"^/    value1 [scalar! vector!] "The minuend"^/    value2 [scalar! vector!] "The subtrahend"^/    return: [scalar! vector!] "The difference"^/]^/suffix?: function [^/    {Returns the suffix (extension) of a filename or url, or NONE if there is no suffix}^/    path [file! url! string! email!]^/]^/sum: function [^/    "Returns the sum of all values in a block"^/    values [block! vector! paren! hash!]^/    /local result value^/]^/swap: action [^/    {Swaps elements between two series or the same series}^/    series1 [series! port!]^/    series2 [series! port!]^/    return: [series! port!]^/]^/switch: native [^/    {Evaluates the first block following the value found in cases}^/    value [any-type!] "The value to match"^/    cases [block!]^/    /default {Specify a default block, if value is not found in cases}^/    case [block!] "Default block to evaluate"^/]^/system: }
+        buffer: {?: make function! [^/    {Displays information about functions, values, objects, and datatypes.}^/    'word [any-type!]^/]^/??: make function! [^/    "Prints a word and the value it refers to (molded)"^/    'value [word! path!]^/]^/a-an: make function! [^/    {Returns the appropriate variant of a or an (simple, vs 100% grammatically correct)}^/    str [string!]^/    /pre "Prepend to str"^/    /local tmp^/]^/about: make function! [^/    "Print Red version information"^/    /debug {Print full Red and OS version information suitable for submitting issues}^/    /cc "Also copy to clipboard"^/    /local git plt txt^/]^/absolute: make action! [^/    "Returns the non-negative value"^/    value [number! money! char! pair! time! any-point!]^/    return: [number! money! char! pair! time! any-point!]^/]^/acos: make function! [^/    {Returns the trigonometric arccosine in radians in range [0,pi]}^/    cosine [float!] "in range [-1,1]"^/]^/action?: make function! ["Returns true if the value is this type" value [any-type!]]^/add: make action! [^/    "Returns the sum of the two values"^/    value1 [scalar! vector!] "The augend"^/    value2 [scalar! vector!] "The addend"^/    return: [scalar! vector!] "The sum"^/]^/alert: make function! [^/    {Displays an alert message in a pop-up modal window}^/    msg [string! block!] "Message to display"^/]^/all: make native! [^/    {Evaluates and returns the last value if all are truthy; else NONE}^/    conds [block!]^/]^/all-word?: make function! ["Returns true if the value is any type of all-word" value [any-type!]]^/also: make function! [^/    {Returns the first value, but also evaluates the second}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/alter: make function! [^/    {If a value is not found in a series, append it; otherwise, remove it. Returns true if added}^/    series [series!]^/    value^/]^/and~: make action! [^/    "Returns the first value ANDed with the second"^/    value1 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/    value2 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/    return: [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/]^/any: make native! [^/    {Evaluates and returns the first truthy value, if any; else NONE}^/    conds [block!]^/]^/any-block?: make function! [{Returns true if the value is any type of any-block} value [any-type!]]^/any-function?: make function! [{Returns true if the value is any type of any-function} value [any-type!]]^/any-interesting?: make function! [{Returns true if the value is any type of any-function} value [any-type!]]^/any-list?: make function! ["Returns true if the value is any type of any-list" value [any-type!]]^/any-object?: make function! [{Returns true if the value is any type of any-object} value [any-type!]]^/any-path?: make function! ["Returns true if the value is any type of any-path" value [any-type!]]^/any-point?: make function! [{Returns true if the value is any type of any-point} value [any-type!]]^/any-string?: make function! [{Returns true if the value is any type of any-string} value [any-type!]]^/any-word?: make function! ["Returns true if the value is any type of any-word" value [any-type!]]^/append: make action! [^/    {Inserts value(s) at series tail; returns series head}^/    series [series! bitset! port!]^/    value [any-type!]^/    /part "Limit the number of values inserted"^/    length [number! series!]^/    /only {Insert block types as single values (overrides /part)}^/    /dup "Duplicate the inserted values"^/    count [integer!]^/    return: [series! port! bitset!]^/]^/apply: make native! [^/    "Apply a function to a reduced block of arguments"^/    func [word! path! any-function!] "Function to apply, with eventual refinements"^/    args [block!] "Block of args, reduced first"^/    /all {Provide every argument in the function spec, in order, tail-completed with false/none.}^/    /safer {Forces single refinement arguments, skip them when inactive instead of evaluating}^/]^/arccosine: make native! [^/    {Returns the trigonometric arccosine in degrees in range [0,180]}^/    cosine [float! integer!] "in range [-1,1]"^/    /radians "DEPRECATED: use `acos` native instead"^/    return: [float!]^/]^/arcsine: make native! [^/    {Returns the trigonometric arcsine in degrees in range [-90,90]}^/    sine [float! integer!] "in range [-1,1]"^/    /radians "DEPRECATED: use `asin` native instead"^/    return: [float!]^/]^/arctangent: make native! [^/    {Returns the trigonometric arctangent in degrees in range [-90,90]}^/    tangent [float! integer!] "in range [-inf,+inf]"^/    /radians "DEPRECATED: use `atan` native instead"^/    return: [float!]^/]^/arctangent2: make native! [^/    {Returns the smallest angle between the vectors (1,0) and (x,y) in degrees (-180,180]}^/    y [float! integer!]^/    x [float! integer!]^/    /radians "DEPRECATED: use `atan2` native instead"^/    return: [float!]^/]^/as: make native! [^/    {Coerce a series into a compatible datatype without copying it}^/    type [datatype! block! paren! any-path! any-string!] "The datatype or example value"^/    spec [block! paren! any-path! any-string!] "The series to coerce"^/]^/as-color: make routine! [^/    "Combine R, G and B values into a tuple"^/    r [integer!]^/    g [integer!]^/    b [integer!]^/]^/as-ipv4: make routine! [^/    "Combine a, b, c and d values into a tuple"^/    a [integer!]^/    b [integer!]^/    c [integer!]^/    d [integer!]^/]^/as-money: make native! [^/    {Combine currency code and amount into a monetary value}^/    currency [word!]^/    amount [integer! float!]^/    return: [money!]^/]^/as-pair: make native! [^/    "Combine X and Y values into a pair"^/    x [integer! float!]^/    y [integer! float!]^/]^/as-point2D: make native! [^/    "Combine X and Y values into a 2D point"^/    x [integer! float!]^/    y [integer! float!]^/]^/as-point3D: make native! [^/    "Combine X, Y and Z values into a 3D point"^/    x [integer! float!]^/    y [integer! float!]^/    z [integer! float!]^/]^/as-rgba: make routine! [^/    {Combine R, G, B and A color components into a tuple}^/    r [integer!]^/    g [integer!]^/    b [integer!]^/    a [integer!]^/]^/asin: make function! [^/    {Returns the trigonometric arcsine in radians in range [-pi/2,pi/2])}^/    sine [float!] "in range [-1,1]"^/]^/ask: make function! [^/    "Prompt the user for input"^/    question [string!]^/    /hide^/    /history "specify the history block"^/    blk [block!]^/    return: [string!]^/    /local t? line^/]^/at: make action! [^/    "Returns a series at a given index"^/    series [series! port!]^/    index [integer! pair!]^/    return: [series! port!]^/]^/atan: make function! [^/    {Returns the trigonometric arctangent in radians in range [-pi/2,+pi/2]}^/    tangent [float!] "in range [-inf,+inf]"^/]^/atan2: make function! [^/    {Returns the smallest angle between the vectors (1,0) and (x,y) in range (-pi,pi]}^/    y [float! integer!]^/    x [float! integer!]^/    return: [float!]^/]^/attempt: make function! [^/    {Tries to evaluate a block and returns result or NONE on error}^/    code [block!]^/    /safer "Capture all possible errors and exceptions"^/    /local all result^/]^/average: make function! [^/    "Returns the average of all values in a block"^/    block [block! vector! paren! hash!]^/]^/back: make action! [^/    "Returns a series at the previous index"^/    series [series! port!]^/    return: [series! port!]^/]^/binary?: make function! ["Returns true if the value is this type" value [any-type!]]^/bind: make native! [^/    "Bind words to a context; returns rebound words"^/    word [block! any-word!]^/    context [any-word! any-object! function!]^/    /copy "Deep copy blocks before binding"^/    return: [block! any-word!]^/]^/bitset?: make function! ["Returns true if the value is this type" value [any-type!]]^/block?: make function! ["Returns true if the value is this type" value [any-type!]]^/body-of: make function! [{Returns the body of a value that supports reflection} value]^/break: make native! [^/    {Breaks out of a loop, while, until, repeat, foreach, etc}^/    /return "Forces the loop function to return a value"^/    value [any-type!]^/]^/browse: make native! [^/    {Opens the URL in a web browser or the file in the associated application}^/    url [url! file!]^/]^/call: make native! [^/    "Executes a shell command to run another process"^/    cmd [string! file!] "A shell command or an executable file"^/    /wait "Runs command and waits for exit"^/    /show {Force the display of system's shell window (Windows only)}^/    /console {Runs command with I/O redirected to console (CLI console only at present)}^/    /shell "Forces command to be run from shell"^/    /input in [string! file! binary!] "Redirects in to stdin"^/    /output out [string! file! binary!] "Redirects stdout to out"^/    /error err [string! file! binary!] "Redirects stderr to err"^/    return: [integer!] "0 if success, -1 if error, or a process ID"^/]^/caret-to-offset: make function! [^/    {Given a text position, returns the corresponding coordinate relative to the top-left of the layout box}^/    face [object!]^/    pos [integer!]^/    /lower "lower end offset of the caret"^/    return: [point2D!]^/    /local opt^/]^/case: make native! [^/    {Evaluates the block following the first truthy condition}^/    cases [block!] "Block of condition-block pairs"^/    /all {Test all conditions, evaluating the block following each truthy condition}^/]^/catch: make native! [^/    {Catches a throw from a block and returns its value}^/    block [block!] "Block to evaluate"^/    /name "Catches a named throw"^/    word [word! block!] "One or more names"^/]^/cause-error: make function! [^/    {Causes an immediate error throw, with the provided information}^/    err-type [word!]^/    err-id [word!]^/    args [block! string!]^/]^/cd: make function! [^/    "Changes the active directory path"^/    :dir [file! word! path!] {New active directory of relative path to the new one}^/]^/center-face: make function! [^/    "Center a face inside its parent"^/    face [object!] "Face to center"^/    /x "Center horizontally only"^/    /y "Center vertically only"^/    /with {Provide a reference face for centering instead of parent face}^/    parent [object!] "Reference face"^/    return: [object!] "Returns the centered face"^/    /local pos^/]^/change: make action! [^/    {Changes a value in a series and returns the series after the change}^/    series [series! port!] "Series at point to change"^/    value [any-type!] "The new value"^/    /part {Limits the amount to change to a given length or position}^/    range [number! series!]^/    /only "Changes a series as a series."^/    /dup "Duplicates the change a specified number of times"^/    count [number!]^/]^/change-dir: make function! [^/    "Changes the active directory path"^/    dir [file! word! path!] {New active directory of relative path to the new one}^/]^/char?: make function! ["Returns true if the value is this type" value [any-type!]]^/charset: make function! [^/    "Shortcut for `make bitset!`"^/    spec [block! integer! char! string! bitset! binary!]^/]^/checksum: make native! [^/    "Computes a checksum, CRC, hash, or HMAC"^/    data [binary! string! file!]^/    method [word!] {MD5 SHA1 SHA256 SHA384 SHA512 CRC32 TCP ADLER32 hash}^/    /with {Extra value for HMAC key or hash table size; not compatible with TCP/CRC32/ADLER32 methods}^/    spec [any-string! binary! integer!] {String or binary for MD5/SHA* HMAC key, integer for hash table size}^/    return: [integer! binary!]^/]^/class-of: make function! ["Returns the class ID of an object" value]^/clean-path: make function! [^/    [no-trace]^/    {Cleans-up '.' and '..' in path; returns the cleaned path}^/    file [file! url! string!]^/    /only "Do not prepend current directory"^/    /dir "Add a trailing / if missing"^/    /local out cnt f not-file? prot^/]^/clear: make action! [^/    {Removes series values from current index to tail; returns new tail}^/    series [series! port! bitset! map! none!]^/    return: [series! port! bitset! map! none!]^/]^/clear-reactions: make function! ["Removes all reactive relations"]^/clock: make function! [^/    {Display execution time of code, returning result of it's evaluation}^/    code [block!]^/    /times n [integer! float!]^/    {Repeat N times (default: once); displayed time is per iteration}^/    /local result^/    text dt unit^/]^/close: make action! [^/    "Closes a port"^/    port [port!]^/]^/collect: make function! [^/    {Collect in a new block all the values passed to KEEP function from the body block}^/    body [block!] "Block to evaluate"^/    /into {Insert into a buffer instead (returns position after insert)}^/    collected [series!] "The buffer series (modified)"^/    /local keep rule pos^/]^/collect-calls: make routine! [blk [block!]]^/comment: make function! ["Consume but don't evaluate the next value" 'value]^/complement: make action! [^/    {Returns the opposite (complementing) value of the input value}^/    value [logic! integer! tuple! bitset! typeset! binary!]^/    return: [logic! integer! tuple! bitset! typeset! binary!]^/]^/complement?: make native! [^/    "Returns TRUE if the bitset is complemented"^/    bits [bitset!]^/]^/compose: make native! [^/    "Returns a copy of a block, evaluating only parens"^/    value [block!]^/    /deep "Compose nested blocks"^/    /only {Compose nested blocks as blocks containing their values}^/    /into {Put results in out block, instead of creating a new block}^/    out [any-block!] "Target block for results, when /into is used"^/]^/compress: make native! [^/    "Compresses data"^/    data [any-string! binary!]^/    method [word!] "zlib deflate gzip"^/    return: [binary!]^/]^/construct: make native! [^/    {Makes a new object from an unevaluated spec; standard logic words are evaluated}^/    block [block!]^/    /with "Use a prototype object"^/    object [object!] "Prototype object"^/    /only "Don't evaluate standard logic words"^/]^/context: make function! [^/    "Makes a new object from an evaluated spec"^/    spec [block!]^/]^/context?: make native! [^/    "Returns the context to which a word is bound"^/    word [any-word!] "Word to check"^/    return: [object! function! none!]^/]^/continue: make native! [^/    "Throws control back to top of loop"^/]^/copy: make action! [^/    "Returns a copy of a non-scalar value"^/    value [series! any-object! bitset! map!]^/    /part "Limit the length of the result"^/    length [number! series! pair!]^/    /deep "Copy nested values"^/    /types "Copy only specific types of non-scalar values"^/    kind [datatype!]^/    return: [series! any-object! bitset! map!]^/]^/cos: make function! [^/    "Returns the trigonometric cosine"^/    angle [float!] "Angle in radians"^/]^/cosine: make native! [^/    "Returns the trigonometric cosine"^/    angle [float! integer!]^/    /radians "DEPRECATED: use `cos` native instead"^/    return: [float!]^/]^/count-chars: make routine! [^/    {Count UTF-8 encoded characters between two positions in a binary series}^/    start [binary!]^/    pos [binary!]^/    return: [integer!]^/]^/create: make action! [^/    "Send port a create request"^/    port [port! file! url! block!]^/]^/create-dir: make routine! ["Create the given directory" path [file!]]^/datatype?: make function! ["Returns true if the value is this type" value [any-type!]]^/date?: make function! ["Returns true if the value is this type" value [any-type!]]^/debase: make native! [^/    {Decodes binary-coded string (BASE-64 default) to binary value}^/    value [string!] "The string to decode"^/    /base "Binary base to use"^/    base-value [integer!] "The base to convert from: 64, 58, 16, or 2"^/]^/debug: make function! [^/    {Runs argument code through an interactive debugger}^/    code [any-type!] "Code to debug"^/    /later {Enters the interactive debugger later, on reading @stop value}^/]^/debug-info?: make function! ["Internal use only" face [object!] return: [logic!]]^/decode-url: make function! [^/    {Decode a URL into an object containing its constituent parts}^/    url [url! string!]^/]^/decompress: make native! [^/    "Decompresses data"^/    data [binary!]^/    method [word!] "zlib deflate gzip"^/    /size {Specify an uncompressed data size (ignored for GZIP)}^/    sz [integer!] "Uncompressed data size; must not be negative"^/    return: [binary!]^/]^/deep-reactor: make function! [spec [block!]]^/^/dehex: make native! [^/    "Converts URL-style hex encoded (%xx) strings"^/    value [any-string!]^/    return: [string!] "Always return a string"^/]^/delete: make action! [^/    "Deletes the specified file or empty folder"^/    file [file! port!]^/]^/difference: make native! [^/    "Returns the special difference of two data sets"^/    set1 [block! hash! string! bitset! typeset! date!]^/    set2 [block! hash! string! bitset! typeset! date!]^/    /case "Use case-sensitive comparison"^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    return: [block! hash! string! bitset! typeset! time!]^/]^/dir: make function! [{Display a directory listing, for the current dir if none is given} 'dir [any-type!]]^/dir?: make function! [{Returns TRUE if the value looks like a directory spec} file [file! url!]]^/dirize: make function! [^/    {Returns a copy of the path turned into a directory}^/    path [file! string! url!]^/]^/distance?: make function! [^/    {Returns the distance between 2 points or face centers}^/    A [object! planar!] "First face or point"^/    B [object! planar!] "Second face or point"^/    return: [float!] "Distance between them"^/    /local d^/]^/divide: make action! [^/    "Returns the quotient of two values"^/    value1 [number! money! char! pair! tuple! vector! time! any-point!] "The dividend (numerator)"^/    value2 [number! money! char! pair! tuple! vector! time! any-point!] "The divisor (denominator)"^/    return: [number! money! char! pair! tuple! vector! time! any-point!] "The quotient"^/]^/do: make native! [^/    {Evaluates a value, returning the last evaluation result}^/    value [any-type!]^/    /expand "Expand directives before evaluation"^/    /args {If value is a script, this will set its system/script/args}^/    arg "Args passed to a script (normally a string)"^/    /next {Do next expression only, return it, update block word}^/    position [word!] "Word updated with new block position"^/    /trace^/    callback [function! [^/        event [word!]^/        code [any-block! none!]^/        offset [integer!]^/        value [any-type!]^/        ref [any-type!]^/        frame [pair!]^/    ]]^/]^/do-actor: make function! ["Internal Use Only" face [object!] event [event! none!] type [word!] /local result^/act name]^/do-events: make function! [^/    {Launch the event loop, blocks until all windows are closed}^/    /no-wait "Process an event in the queue and returns at once"^/    return: [logic! word!] "Returned value from last event"^/    /local result screen win^/]^/do-file: make function! ["Internal Use Only" file [file! url!] callback [function! none!]^//local ws saved src found? code header? header new-path list c done?]^/do-no-sync: make function! [^/    "Evaluate CODE with view/auto-sync?: off"^/    code [block!]^/    /local r e old^/]^/do-safe: make function! ["Internal Use Only" code [block!] /local result error]^/do-thru: make function! [^/    {Evaluates a remote Red script through local disk cache}^/    url [url!] "Remote file address"^/    /update "Force a cache update"^/]^/does: make native! [^/    {Defines a function with no arguments or local variables}^/    body [block!]^/]^/draw: make function! [^/    "Draws scalable vector graphics to an image"^/    image [image! pair!] "Image or size for an image"^/    cmd [block!] "Draw commands"^/    /transparent "Make a transparent image, if pair! spec is used"^/    return: [image!]^/]^/dt: make function! [^/    "Returns the time required to evaluate a block"^/    body [block!]^/    return: [time!]^/    /local t0^/]^/dump-face: make function! [^/    {Display debugging info about a face and its children}^/    face [object!] "Face to analyze"^/    /local depth f^/]^/dump-reactions: make function! [^/    {Outputs all the current reactive relations for debugging purpose}^/    /local limit count obj field reaction target list^/]^/either: make native! [^/    {If conditional expression is truthy, evaluate the first branch; else evaluate the alternative}^/    cond [any-type!]^/    true-blk [block!]^/    false-blk [block!]^/]^/ellipsize-at: make function! [^/    {Truncate and add ellipsis if str is longer than len}^/    str [string!] "(modified)"^/    len [integer!] "Max length"^/]^/email?: make function! ["Returns true if the value is this type" value [any-type!]]^/empty?: make function! [^/    {Returns true if data is a series at its tail or an empty map}^/    data [series! none! map!]^/    return: [logic!]^/]^/enbase: make native! [^/    {Encodes a string into a binary-coded string (BASE-64 default)}^/    value [binary! string!] "If string, will be UTF8 encoded"^/    /base "Binary base to use"^/    base-value [integer!] "The base to convert from: 64, 58, 16, or 2"^/]^/encode-url: make function! [url-obj [object!] "What you'd get from decode-url"^//local result]^/enhex: make native! [^/    "Encode URL-style hex encoded (%xx) strings"^/    value [any-string!]^/    return: [string!] "Always return a string"^/]^/equal?: make native! [^/    "Returns TRUE if two values are equal"^/    value1 [any-type!]^/    value2 [any-type!]^/]^/error?: make function! ["Returns true if the value is this type" value [any-type!]]^/eval-set-path: make function! ["Internal Use Only" value1]^/even?: make action! [^/    {Returns true if the number is evenly divisible by 2}^/    number [number! money! char! time!]^/    return: [logic!]^/]^/event?: make routine! ["Returns true if the value is this type" value [any-type!] return: [logic!]]^/exclude: make native! [^/    {Returns the first data set less the second data set}^/    set1 [block! hash! string! bitset! typeset!]^/    set2 [block! hash! string! bitset! typeset!]^/    /case "Use case-sensitive comparison"^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    return: [block! hash! string! bitset! typeset!]^/]^/exists-thru?: make function! [^/    {Returns true if the remote file is present in the local disk cache}^/    url [url! file!] "Remote file address"^/]^/exists?: make routine! ["Returns TRUE if the file exists" path [file!] return: [logic!]]^/exit: make native! [^/    "Exits a function, returning no value"^/]^/exp: make native! [^/    {Raises E (the base of natural logarithm) to the power specified}^/    value [float! integer! percent!]^/    return: [float!]^/]^/expand: make function! [^/    {Preprocess the argument block and display the output (console only)}^/    blk [block!] "Block to expand"^/]^/expand-directives: make function! [^/    {Invokes the preprocessor on argument list, modifying and returning it}^/    code [block! paren!] "List of Red values to preprocess"^/    /clean "Clear all previously created macros and words"^/    /local job saved^/]^/extend: make native! [^/    {Extend an object or map value with list of key and value pairs}^/    obj [object! map!]^/    spec [block! hash! map!]^/    /case "Use case-sensitive comparison"^/]^/extract: make function! [^/    {Extracts a value from a series at regular intervals}^/    series [series!]^/    width [integer!] "Size of each entry (the skip)"^/    /index "Extract from an offset position"^/    pos [integer!] "The position"^/    /into {Provide an output series instead of creating a new one}^/    output [series!] "Output series"^/]^/extract-boot-args: make function! [^/    {Process command-line arguments and store values in system/options (internal usage)}^/    /local args at-arg2 ws split-mode arg-end s' e' arg2-update s e^/]^/face: make object! [^/    type: 'window^/    offset: (559.2, 339.2)^/    size: 839x654^/    text: "Red Console"^/    image: none^/    color: none^/    menu: none^/    data: none^/    enabled?: true^/    visible?: false^/    selected: make object! [^/        type: 'rich-text^/        offset: (0, 0)^/        size: 840x655^/        text: none^/        image: none^/        color: 22.22.22^/        menu: none^/        data: none^/        enabled?: true^/        visible?: true^/        selected: none^/        flags: [scrollable all-over]^/        options: [cursor: I-beam]^/        parent: make object! [...]^/        pane: none^/        state: [handle! 0 none false]^/        rate: 10^/        edge: none^/        para: none^/        font: make object! [^/            name: "Consolas"^/            size: 11^/            style: none^/            angle: 0^/            color: 222.222.222^/            anti-alias?: false^/            shadow: none^/            state: [handle! none none]^/            parent: []^/        ]^/        actors: make object! [^/            on-time: func [face [object!] event [event!]][^/                if all [caret/enabled? none? caret/rate] [caret/rate: caret-rate]^/                terminal/on-time^/                'done^/            ]^/            on-drawing: func [face [object!] event [event!]][^/                terminal/paint^/            ]^/            on-scroll: func [face [object!] event [event!]][^/                terminal/scroll event^/            ]^/            on-wheel: func [face [object!] event [event!]][^/                either event/ctrl? [^/                    terminal/zoom event^/                ] [^/                    terminal/scroll event^/                ]^/            ]^/            on-key: func [face [object!] event [event!]][^/                terminal/press-key event^/            ]^/            on-key-down: func [face [object!] event [event!]][^/                if all [1 = length? event/flags find event/flags 'alt] [^/                    switch event/key [^/                        #"A" [terminal/select-all]^/                        #"O" [show-cfg-dialog]^/                    ]^/                ]^/            ]^/            on-ime: func [face [object!] event [event!]][^/                terminal/process-ime-input event^/            ]^/            on-down: func [face [object!] event [event!]][^/                terminal/mouse-down event^/            ]^/            on-up: func [face [object!] event [event!]][^/                terminal/mouse-up event^/            ]^/            on-alt-down: func [face [object!] event [event!]][^/                if cfg/mouse-paste? = 'true [^/                    either terminal/text-selected? [^/                        terminal/copy-selection^/                        clear terminal/selects^/                        system/view/platform/redraw face^/                    ] [^/                        terminal/paste^/                    ]^/                ]^/            ]^/            on-over: func [face [object!] event [event!]][^/                terminal/mouse-move to-pair event/offset^/            ]^/            on-menu: func [face [object!] event [event!]][^/                switch event/picked [^/                    copy [terminal/copy-selection]^/                    paste [terminal/paste]^/                    select-all [terminal/select-all]^/                ]^/                'done^/            ]^/        ]^/        extra: none^/        draw: none^/        tabs: none^/        line-spacing: 'default^/        handles: none^/        init: func [/local box][^/            terminal/windows: get in get-current-screen 'pane^/            box: terminal/box^/            box/data: make block! 200^/            scroller: get-scroller self 'horizontal^/            scroller/visible?: no^/            scroller: get-scroller self 'vertical^/            scroller/position: 1^/            scroller/max-size: 2^/        ]^/    ]^/    flags: [resize]^/    options: none^/    parent: make object! [^/        type: 'screen^/        offset: 0x0^/        size: 2048x1152^/        text: none^/        image: none^/        color: none^/        menu: none^/        data: 1.25^/        enabled?: true^/        visible?: true^/        selected: none^/        flags: none^/        options: none^/        parent: none^/        pane: []^/        state: [handle! 0 none [1]]^/        rate: none^/        edge: none^/        para: none^/        font: none^/        actors: none^/        extra: none^/        draw: none^/    ]^/    pane: [make object! [^/        type: 'rich-text^/        offset: (0, 0)^/        size: 840x655^/        text: none^/        image: none^/        color: 22.22.22^/        menu: none^/        data: none^/        enabled?: true^/        visible?: true^/        selected: none^/        flags: [scrollable all-over]^/        options: [cursor: I-beam]^/        parent: make object! [...]^/        pane: none^/        state: [handle! 0 none false]^/        rate: 10^/        edge: none^/        para: none^/        font: make object! [^/            name: "Consolas"^/            size: 11^/            style: none^/            angle: 0^/            color: 222.222.222^/            anti-alias?: false^/            shadow: none^/            state: [handle! none none]^/            parent: []^/        ]^/        actors: make object! [^/            on-time: func [face [object!] event [event!]][^/                if all [caret/enabled? none? caret/rate] [caret/rate: caret-rate]^/                terminal/on-time^/                'done^/            ]^/            on-drawing: func [face [object!] event [event!]][^/                terminal/paint^/            ]^/            on-scroll: func [face [object!] event [event!]][^/                terminal/scroll event^/            ]^/            on-wheel: func [face [object!] event [event!]][^/                either event/ctrl? [^/                    terminal/zoom event^/                ] [^/                    terminal/scroll event^/                ]^/            ]^/            on-key: func [face [object!] event [event!]][^/                terminal/press-key event^/            ]^/            on-key-down: func [face [object!] event [event!]][^/                if all [1 = length? event/flags find event/flags 'alt] [^/                    switch event/key [^/                        #"A" [terminal/select-all]^/                        #"O" [show-cfg-dialog]^/                    ]^/                ]^/            ]^/            on-ime: func [face [object!] event [event!]][^/                terminal/process-ime-input event^/            ]^/            on-down: func [face [object!] event [event!]][^/                terminal/mouse-down event^/            ]^/            on-up: func [face [object!] event [event!]][^/                terminal/mouse-up event^/            ]^/            on-alt-down: func [face [object!] event [event!]][^/                if cfg/mouse-paste? = 'true [^/                    either terminal/text-selected? [^/                        terminal/copy-selection^/                        clear terminal/selects^/                        system/view/platform/redraw face^/                    ] [^/                        terminal/paste^/                    ]^/                ]^/            ]^/            on-over: func [face [object!] event [event!]][^/                terminal/mouse-move to-pair event/offset^/            ]^/            on-menu: func [face [object!] event [event!]][^/                switch event/picked [^/                    copy [terminal/copy-selection]^/                    paste [terminal/paste]^/                    select-all [terminal/select-all]^/                ]^/                'done^/            ]^/        ]^/        extra: none^/        draw: none^/        tabs: none^/        line-spacing: 'default^/        handles: none^/        init: func [/local box][^/            terminal/windows: get in get-current-screen 'pane^/            box: terminal/box^/            box/data: make block! 200^/            scroller: get-scroller self 'horizontal^/            scroller/visible?: no^/            scroller: get-scroller self 'vertical^/            scroller/position: 1^/            scroller/max-size: 2^/        ]^/    ] make object! [^/        type: 'base^/        offset: (0, 0)^/        size: 1x17^/        text: none^/        image: none^/        color: 222.222.222.1^/        menu: none^/        data: none^/        enabled?: false^/        visible?: true^/        selected: none^/        flags: none^/        options: [caret make object! [^/            type: 'rich-text^/            offset: (0, 0)^/            size: 840x655^/            text: none^/            image: none^/            color: 22.22.22^/            menu: none^/            data: none^/            enabled?: true^/            visible?: true^/            selected: none^/            flags: [scrollable all-over]^/            options: [cursor: I-beam]^/            parent: make object! [...]^/            pane: none^/            state: [handle! 0 none false]^/            rate: 10^/            edge: none^/            para: none^/            font: make object! [^/                name: "Consolas"^/                size: 11^/                style: none^/                angle: 0^/                color: 222.222.222^/                anti-alias?: false^/                shadow: none^/                state: [handle! none none]^/                parent: []^/            ]^/            actors: make object! [^/                on-time: func [face [object!] event [event!]][^/                    if all [caret/enabled? none? caret/rate] [caret/rate: caret-rate]^/                    terminal/on-time^/                    'done^/                ]^/                on-drawing: func [face [object!] event [event!]][^/                    terminal/paint^/                ]^/                on-scroll: func [face [object!] event [event!]][^/                    terminal/scroll event^/                ]^/                on-wheel: func [face [object!] event [event!]][^/                    either event/ctrl? [^/                        terminal/zoom event^/                    ] [^/                        terminal/scroll event^/                    ]^/                ]^/                on-key: func [face [object!] event [event!]][^/                    terminal/press-key event^/                ]^/                on-key-down: func [face [object!] event [event!]][^/                    if all [1 = length? event/flags find event/flags 'alt] [^/                        switch event/key [^/                            #"A" [terminal/select-all]^/                            #"O" [show-cfg-dialog]^/                        ]^/                    ]^/                ]^/                on-ime: func [face [object!] event [event!]][^/                    terminal/process-ime-input event^/                ]^/                on-down: func [face [object!] event [event!]][^/                    terminal/mouse-down event^/                ]^/                on-up: func [face [object!] event [event!]][^/                    terminal/mouse-up event^/                ]^/                on-alt-down: func [face [object!] event [event!]][^/                    if cfg/mouse-paste? = 'true [^/                        either terminal/text-selected? [^/                            terminal/copy-selection^/                            clear terminal/selects^/                            system/view/platform/redraw face^/                        ] [^/                            terminal/paste^/                        ]^/                    ]^/                ]^/                on-over: func [face [object!] event [event!]][^/                    terminal/mouse-move to-pair event/offset^/                ]^/                on-menu: func [face [object!] event [event!]][^/                    switch event/picked [^/                        copy [terminal/copy-selection]^/                        paste [terminal/paste]^/                        select-all [terminal/select-all]^/                    ]^/                    'done^/                ]^/            ]^/            extra: none^/            draw: none^/            tabs: none^/            line-spacing: 'default^/            handles: none^/            init: func [/local box][^/                terminal/windows: get in get-current-screen 'pane^/                box: terminal/box^/                box/data: make block! 200^/                scroller: get-scroller self 'horizontal^/                scroller/visible?: no^/                scroller: get-scroller self 'vertical^/                scroller/position: 1^/                scroller/max-size: 2^/            ]^/        ] cursor: I-beam accelerated: yes]^/        parent: make object! [...]^/        pane: none^/        state: [handle! 0 none false]^/        rate: 0:00:00.53^/        edge: none^/        para: none^/        font: none^/        actors: make object! [^/            on-time: func [face [object!] event [event!]][^/                face/color: either face/color = caret-clr [255.255.255.254] [caret-clr]^/                'done^/            ]^/        ]^/        extra: none^/        draw: none^/    ] make object! [^/        type: 'panel^/        offset: (0, 0)^/        size: 150x200^/        text: none^/        image: none^/        color: 0.0.128^/        menu: none^/        data: none^/        enabled?: true^/        visible?: false^/        selected: none^/        flags: none^/        options: none^/        parent: make object! [...]^/        pane: none^/        state: [handle! 0 none false]^/        rate: none^/        edge: none^/        para: none^/        font: make object! [^/            name: "Consolas"^/            size: 11^/            style: none^/            angle: 0^/            color: 255.255.255^/            anti-alias?: false^/            shadow: none^/            state: [handle! none none]^/            parent: [make object! [^/                type: 'rich-text^/                offset: none^/                size: 820x655^/                text: "XXXXXXXXXX"^/                image: none^/                color: none^/                menu: none^/                data: []^/                enabled?: true^/                visible?: true^/                selected: none^/                flags: none^/                options: none^/                parent: none^/                pane: none^/                state: none^/                rate: none^/                edge: none^/                para: none^/                font: make object! [^/                    name: "Consolas"^/                    size: 11^/                    style: none^/                    angle: 0^/                    color: 222.222.222^/                    anti-alias?: false^/                    shadow: none^/                    state: [handle! none none]^/                    parent: [...]^/                ]^/                actors: none^/                extra: none^/                draw: none^/                tabs: 32.4^/                line-spacing: 17^/                handles: [handle! handle! "XXXXXXXXXX" true]^/            ]]^/        ]^/        actors: make object! [^/            on-key-down: func [face [object!] event [event!]][^/                probe event/key^/            ]^/        ]^/        extra: none^/        draw: none^/    ]]^/    state: [handle! 0 none false]^/    rate: none^/    edge: none^/    para: none^/    font: none^/    actors: make object! [^/        on-menu: func [face [object!] event [event!] /local ft f][^/            switch event/picked [^/                about-msg [display-about]^/                shortcuts [show-shortcuts]^/                quit [self/on-close face event]^/                run-file [if f: request-file [terminal/run-file f]]^/                choose-font [^/                    if ft: request-font/font/mono font [^/                        font: ft^/                        console/font: font^/                        terminal/zoom font^/                    ]^/                ]^/                settings [show-cfg-dialog]^/            ]^/        ]^/        on-close: func [face [object!] event [event!]][^/            system/view/platform/exit-event-loop^/            foreach screen system/view/screens [clear head screen/pane]^/            quit^/        ]^/        on-resizing: func [face [object!] event [event!]^/        /local new-sz][^/            new-sz: to-pair event/offset + 1x1^/            console/size: new-sz^/            terminal/resize new-sz^/            terminal/adjust-console-size new-sz^/            unless system/view/auto-sync? [show face]^/        ]^/        on-resize: func [face [object!] event [event!]^/        /local new-sz][^/            new-sz: to-pair event/offset + 1x1^/            console/size: new-sz^/            terminal/resize new-sz^/            terminal/adjust-console-size new-sz^/            unless system/view/auto-sync? [show face]^/        ]^/        on-focus: func [face [object!] event [event!]][^/            focused?: yes^/            caret/color: caret-clr^/            unless caret/enabled? [caret/enabled?: yes]^/            caret/rate: caret-rate^/            terminal/refresh/force^/        ]^/        on-unfocus: func [face [object!] event [event!]][^/            focused?: no^/            if caret/enabled? [caret/enabled?: no]^/            caret/rate: none^/        ]^/        on-key-down: func [face [object!] event [event!]][^/            if event/key = 'F12 [^/                cfg/menu-bar?: to-word none? face/menu^/                toggle-menu-bar^/            ]^/        ]^/    ]^/    extra: none^/    draw: none^/]^/^/face?: make function! [^/    "Returns TRUE if the value is a face! object"^/    value "Value to test"^/    return: [logic!]^/]^/fetch-help: make function! [^/    {Returns information about functions, values, objects, and datatypes.}^/    'word [any-type!] "Omit the word arg for HELP usage."^/    /local ref-given? value^/]^/fifth: make function! ["Returns the fifth value in a series" s [series! tuple! date!]]^/file?: make function! ["Returns true if the value is this type" value [any-type!]]^/find: make action! [^/    {Returns the series where a value is found, or NONE}^/    series [series! bitset! typeset! port! map! none!]^/    value [any-type!] {Typesets and datatypes can be used to search by datatype}^/    /part "Limit the length of the search"^/    length [number! series!]^/    /only {Treat series and typeset value arguments as single values}^/    /case "Perform a case-sensitive search"^/    /same {Use "same?" as comparator}^/    /any "TBD: Use * and ? wildcards in string searches"^/    /with "TBD: Use custom wildcards in place of * and ?"^/    wild [string!]^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    /last "Find the last occurrence of value, from the tail"^/    /reverse {Find the last occurrence of value, from the current index}^/    /tail {Return the tail of the match found, rather than the head}^/    /match "Match at current index only"^/]^/find-flag?: make routine! [^/    "Checks a flag in a face object"^/    facet [any-type!]^/    flag [word!]^/]^/first: make function! ["Returns the first value in a series" s [series! tuple! pair! any-point! date! time!]]^/flip-exe-flag: make function! [^/    {Flip the sub-system for the red.exe between console and GUI modes (Windows only)}^/    path [file!] "Path to the red.exe"^/    /local file buffer flag^/]^/float?: make function! ["Returns true if the value is this type" value [any-type!]]^/^/forall: make native! [^/    "Evaluates body for all values in a series"^/    'word [word!] "Word referring to series to iterate over"^/    body [block!]^/]^/foreach: make native! [^/    "Evaluates body for each value in a series"^/    'word [word! block!] "Word, or words, to set on each iteration"^/    series [series! map!]^/    body [block!]^/]^/foreach-face: make function! [^/    {Evaluates body for each face in a face tree matching the condition}^/    face [object!] "Root face of the face tree"^/    body [block! function!] {Body block (`face` object) or function `func [face [object!]]`}^/    /with "Filter faces according to a condition"^/    spec [block! none!] "Condition applied to face object"^/    /post {Evaluates body for current face after processing its children}^/    /sub post? "Do not rebind body and spec, internal use only"^/    /local exec^/]^/forever: make native! [^/    "Evaluates body repeatedly forever"^/    body [block!]^/]^/form: make action! [^/    {Returns a user-friendly string representation of a value}^/    value [any-type!]^/    /part "Limit the length of the result"^/    limit [integer!]^/    return: [string!]^/]^/fourth: make function! ["Returns the fourth value in a series" s [series! tuple! date!]]^/frame-index?: make routine! [return: [integer!]]^/func: make native! [^/    "Defines a function with a given spec and body"^/    spec [block!]^/    body [block!]^/]^/function: make native! [^/    {Defines a function, making all set-words found in body, local}^/    spec [block!]^/    body [block!]^/    /extern "Exclude words that follow this refinement"^/]^/function?: make function! ["Returns true if the value is this type" value [any-type!]]^/get: make native! [^/    "Returns the value a word refers to"^/    word [any-word! any-path! object!]^/    /any {If word has no value, return UNSET rather than causing an error}^/    /case "Use case-sensitive comparison (path only)"^/    return: [any-type!]^/]^/get-caret-blink-time: make routine! [^/    return: [integer!]^/]^/get-current-dir: make routine! [{Returns the platform's current directory for the process}]^/get-current-screen: make function! [^/    {Returns the screen face of the Display where the mouse cursor is currently located}^/    return: [object!] "Screen face"^/    /local handle screen^/]^/get-env: make native! [^/    {Returns the value of an OS environment variable (for current process)}^/    var [any-string! any-word!] "Variable to get"^/    return: [string! none!]^/]^/get-face-pane: make function! [^/    "Returns the list of a container children or none"^/    face [object!] "Face container"^/    return: [block! none!]^/]^/get-focusable: make function! [^/    "Returns the next focusable face from a face tree"^/    faces [block!] "Position to start from in a face's pane"^/    /back "Search backward"^/    /local origin checks flags f pane p^/]^/get-path?: make function! ["Returns true if the value is this type" value [any-type!]]^/get-scroller: make function! [^/    "return a scroller object from a face"^/    face [object!]^/    orientation [word!]^/    return: [object!]^/]^/get-sys-words: make function! [test [function!]]^/get-word?: make function! ["Returns true if the value is this type" value [any-type!]]^/greater-or-equal?: make native! [^/    {Returns TRUE if the first value is greater than or equal to the second}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/greater?: make native! [^/    {Returns TRUE if the first value is greater than the second}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/^/halt: make function! ["Stops evaluation and returns to the input prompt"]^/handle?: make function! ["Returns true if the value is this type" value [any-type!]]^/has: make native! [^/    {Defines a function with local variables, but no arguments}^/    vars [block!]^/    body [block!]^/]^/hash?: make function! ["Returns true if the value is this type" value [any-type!]]^/head: make action! [^/    "Returns a series at its first index"^/    series [series! port!]^/    return: [series! port!]^/]^/head?: make action! [^/    "Returns true if a series is at its first index"^/    series [series! port!]^/    return: [logic!]^/]^/help: make function! [^/    {Displays information about functions, values, objects, and datatypes.}^/    'word [any-type!]^/]^/^/help-string: make function! [^/    {Returns information about functions, values, objects, and datatypes.}^/    'word [any-type!] "Omit the word arg for HELP usage."^/    /local ref-given? value^/]^/hex-to-rgb: make function! [^/    {Converts a color in hex format to a tuple value; returns NONE if it fails}^/    hex [issue!] "Accepts #rgb, #rrggbb, #rrggbbaa"^/    return: [tuple! none!]^/    /local str bin^/]^/^/if: make native! [^/    {If conditional expression is truthy, evaluate block; else return NONE}^/    cond [any-type!]^/    then-blk [block!]^/]^/image?: make function! ["Returns true if the value is this type" value [any-type!]]^/immediate?: make function! [{Returns true if the value is any type of immediate} value [any-type!]]^/in: make native! [^/    {Returns the given word bound to the object's context}^/    object [any-object! any-function!]^/    word [any-word! refinement!]^/]^/index?: make action! [^/    {Returns the current index of series relative to the head, or of word in a context}^/    series [series! port! any-word!]^/    return: [integer!]^/]^/input: make function! ["Wait for console user input" return: [string!]]^/insert: make action! [^/    {Inserts value(s) at series index; returns series past the insertion}^/    series [series! port! bitset!]^/    value [any-type!]^/    /part "Limit the number of values inserted"^/    length [number! series!]^/    /only {Insert block types as single values (overrides /part)}^/    /dup "Duplicate the inserted values"^/    count [integer!]^/    return: [series! port! bitset!]^/]^/insert-event-func: make function! [^/    {Adds a function to monitor global events. Returns the function}^/    name [word!]^/    fun [block! function!] "A function or a function body block"^/    /local svh^/]^/integer?: make function! ["Returns true if the value is this type" value [any-type!]]^/intersect: make native! [^/    "Returns the intersection of two data sets"^/    set1 [block! hash! string! bitset! typeset!]^/    set2 [block! hash! string! bitset! typeset!]^/    /case "Use case-sensitive comparison"^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    return: [block! hash! string! bitset! typeset!]^/]^/is: make function! []^/issue?: make function! ["Returns true if the value is this type" value [any-type!]]^/keys-of: make function! [{Returns the list of words of a value that supports reflection} value]^/last: make function! ["Returns the last value in a series" s [series! tuple!]]^/last-lf?: make routine! ["Internal Use Only"]^/last?: make function! [^/    "Returns TRUE if the series length is 1"^/    series [series!]^/]^/layout: make function! [^/    [no-trace]^/    {Return a face with a pane built from a VID description}^/    spec [block!] "Dialect block of styles, attributes, and layouts"^/    /tight "Zero offset and origin"^/    /options^/    user-opts [block!] "Optional features in [name: value] format"^/    /flags^/    flgs [block! word!] "One or more window flags"^/    /only "Returns only the pane block"^/    /parent^/    panel [object!]^/    divides [integer! none!]^/    /styles "Use an existing styles list"^/    css [block!] "Styles list"^/    /local axis anti^/    background! list reactors local-styles pane-size direction align begin size max-sz current global? below? origin spacing top-left bound cursor opts opt-words re-align sz words reset focal-face svmp pad value anti2 at-offset later? name styling? style styled? st actors face h pos styled w blk vid-align prev mar divide? index dir pad2 image^/]^/length?: make action! [^/    {Returns the number of values in the series, from the current index to the tail}^/    series [series! port! bitset! map! tuple! none!]^/    return: [integer! none!]^/]^/lesser-or-equal?: make native! [^/    {Returns TRUE if the first value is less than or equal to the second}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/lesser?: make native! [^/    {Returns TRUE if the first value is less than the second}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/link-sub-to-parent: make function! ["Internal Use Only" face [object!] type [word!] old new^//local parent]^/link-tabs-to-parent: make function! [^/    "Internal Use Only"^/    face [object!]^/    /init "Force /show of first tab"^/    /local faces visible?^/]^/list-dir: make function! [^/    {Displays a list of files and directories from given folder or current one}^/    dir [any-type!] "Folder to list"^/    /col "Forces the display in a given number of columns"^/    n [integer!] "Number of columns"^/    /local list limit max-sz name^/]^/list-env: make native! [^/    {Returns a map of OS environment variables (for current process)}^/    return: [map!]^/]^/lit-path?: make function! ["Returns true if the value is this type" value [any-type!]]^/lit-word?: make function! ["Returns true if the value is this type" value [any-type!]]^/ll: make function! [{Display a single column directory listing, for the current dir if none is given} 'dir [any-type!]]^/load: make function! [^/    {Returns a value or block of values by reading and evaluating a source}^/    source [file! url! string! binary!]^/    /header "TBD"^/    /all {Load all values, returns a block. TBD: Don't evaluate Red header}^/    /trap {Load all values, returns [[values] position error]}^/    /next {Load the next value only, updates source series word}^/    position [word!] "Word updated with new series position"^/    /part "Limit to a length or position"^/    length [integer! string!]^/    /into {Put results in out block, instead of creating a new block}^/    out [block!] "Target block for results"^/    /as {Specify the type of data; use NONE to load as code}^/    type [word! none!] "E.g. bmp, gif, jpeg, png, redbin, json, csv"^/    /local codec suffix name mime pre-load^/]^/load-csv: make function! [^/    {Converts CSV text to a block of rows, where each row is a block of fields.}^/    data [string!] "Text CSV data to load"^/    /with^/    delimiter [char! string!] "Delimiter to use (default is comma)"^/    /header {Treat first line as header; implies /as-columns if /as-records is not used}^/    /as-columns {Returns named columns; default names if /header is not used}^/    /as-records {Returns records instead of rows; default names if /header is not used}^/    /flat {Returns a flat block; you need to know the number of fields}^/    /trim "Ignore spaces between quotes and delimiter"^/    /quote^/    qt-char [char!] {Use different character for quotes than double quote (")}^/    /local disallowed refs output out-map longest line value record newline quotchars valchars quoted-value char normal-value s e single-value values add-value add-line length index line-rule init parsed? mark key-index key^/]^/load-json: make function! [^/    "Convert a JSON string to Red data"^/    input [string!] "The JSON string"^/]^/load-thru: make function! [^/    "Loads a remote file through local disk cache"^/    url [url!] "Remote file address"^/    /update "Force a cache update"^/    /as {Specify the type of data; use NONE to load as code}^/    type [word! none!] "E.g. bmp, gif, jpeg, png"^/    /local path file^/]^/log-10: make native! [^/    "Returns the base-10 logarithm"^/    value [float! integer! percent!]^/    return: [float!]^/]^/log-2: make native! [^/    "Return the base-2 logarithm"^/    value [float! integer! percent!]^/    return: [float!]^/]^/log-e: make native! [^/    {Returns the natural (base-E) logarithm of the given value}^/    value [float! integer! percent!]^/    return: [float!]^/]^/logic?: make function! ["Returns true if the value is this type" value [any-type!]]^/loop: make native! [^/    "Evaluates body a number of times"^/    count [integer! float!]^/    body [block!]^/]^/lowercase: make native! [^/    "Converts string of characters to lowercase"^/    string [any-string! char!] "Value to convert (modified when series)"^/    /part "Limits to a given length or position"^/    limit [number! any-string!]^/    return: [any-string! char!]^/]^/ls: make function! [{Display a directory listing, for the current dir if none is given} 'dir [any-type!]]^/make: make action! [^/    {Returns a new value made from a spec for that value's type}^/    type [any-type!] "The datatype, an example or prototype value"^/    spec [any-type!] "The specification of the new value"^/    return: [any-type!] "Returns the specified datatype"^/]^/make-dir: make function! [^/    {Creates the specified directory. No error if already exists}^/    path [file!]^/    /deep "Create subdirectories too"^/    /local dirs end created dir^/]^/make-face: make function! [^/    {Make a face from a given style name or example face}^/    style [word!] "A face type"^/    /spec^/    blk [block!] "Spec block of face options expressed in VID"^/    /offset^/    xy [pair!] "Offset of the face"^/    /size^/    wh [pair!] "Size of the face"^/    /local^/    svv face styles model opts css^/]^/map?: make function! ["Returns true if the value is this type" value [any-type!]]^/math: make function! [^/    "Evaluates expression using math precedence rules"^/    datum [block! paren!] "Expression to evaluate"^/    /safe "Returns NONE on error"^/    /local match^/    order infix tally enter recur count operator^/]^/max: make native! [^/    "Returns the greater of the two values"^/    value1 [scalar! series!]^/    value2 [scalar! series!]^/]^/metrics?: make function! [^/    {Returns a pair! value in the type metrics for the argument face}^/    face [object!] "Face object to query"^/    type [word!] "Metrics type: 'paddings or 'margins"^/    /total "Return the addition of metrics along an axis"^/    axis [word!] "Axis to use for addition: 'x or 'y"^/    /local res^/]^/min: make native! [^/    "Returns the lesser of the two values"^/    value1 [scalar! series!]^/    value2 [scalar! series!]^/]^/mod: make function! [^/    "Compute a nonnegative remainder of A divided by B"^/    a [number! money! char! pair! tuple! vector! time!]^/    b [number! money! char! pair! tuple! vector! time!] "Must be nonzero"^/    return: [number! money! char! pair! tuple! vector! time!]^/    /local r^/]^/modify: make action! [^/    "Change mode for target aggregate value"^/    target [object! series! bitset!]^/    field [word!]^/    value [any-type!]^/    /case "Perform a case-sensitive lookup"^/]^/modulo: make function! [^/    {Wrapper for MOD that handles errors like REMAINDER. Negligible values (compared to A and B) are rounded to zero}^/    a [number! money! char! pair! tuple! vector! time!]^/    b [number! money! char! pair! tuple! vector! time!]^/    return: [number! money! char! pair! tuple! vector! time!]^/    /local r^/]^/mold: make action! [^/    {Returns a source format string representation of a value}^/    value [any-type!]^/    /only "Exclude outer brackets if value is a block"^/    /all "TBD: Return value in loadable format"^/    /flat "Exclude all indentation"^/    /part "Limit the length of the result"^/    limit [integer!]^/    return: [string!]^/]^/money?: make function! ["Returns true if the value is this type" value [any-type!]]^/move: make action! [^/    {Moves one or more elements from one series to another position or series}^/    origin [series! port!]^/    target [series! port!]^/    /part "Limit the number of values inserted"^/    length [integer!]^/    return: [series! port!]^/]^/multiply: make action! [^/    "Returns the product of two values"^/    value1 [number! money! char! pair! tuple! vector! time! any-point!] "The multiplicand"^/    value2 [number! money! char! pair! tuple! vector! time! any-point!] "The multiplier"^/    return: [number! money! char! pair! tuple! vector! time! any-point!] "The product"^/]^/NaN?: make native! [^/    "Returns TRUE if the number is Not-a-Number"^/    value [number!]^/    return: [logic!]^/]^/native?: make function! ["Returns true if the value is this type" value [any-type!]]^/negate: make action! [^/    "Returns the opposite (additive inverse) value"^/    number [number! money! bitset! pair! time! any-point!]^/    return: [number! money! bitset! pair! time! any-point!]^/]^/negative?: make native! [^/    "Returns TRUE if the number is negative"^/    number [number! money! time!]^/    return: [logic!]^/]^/new-line: make native! [^/    {Sets or clears the new-line marker within a list series}^/    position [any-list!] "Position to change marker (modified)"^/    value [logic!] "Set TRUE for newline"^/    /all "Set/clear marker to end of series"^/    /skip {Set/clear marker periodically to the end of the series}^/    size [integer!]^/    return: [any-list!]^/]^/new-line?: make native! [^/    {Returns the state of the new-line marker within a list series}^/    position [any-list!] "Position to check marker"^/    return: [logic!]^/]^/next: make action! [^/    "Returns a series at the next index"^/    series [series! port!]^/    return: [series! port!]^/]^/no-react: make function! [^/    {Evaluates a block with all previously defined reactions disabled}^/    body [block!] "Code block to evaluate"^/    /local result^/]^/none?: make function! ["Returns true if the value is this type" value [any-type!]]^/normalize-dir: make function! [^/    "Returns an absolute directory spec"^/    dir [file! word! path!]^/]^/not: make native! [^/    {Returns the logical complement of a value (truthy or falsy)}^/    value [any-type!]^/]^/not-equal?: make native! [^/    "Returns TRUE if two values are not equal"^/    value1 [any-type!]^/    value2 [any-type!]^/]^/now: make native! [^/    "Returns date and time"^/    /year "Returns year only"^/    /month "Returns month only"^/    /day "Returns day of the month only"^/    /time "Returns time only"^/    /zone "Returns time zone offset from UTC (GMT) only"^/    /date "Returns date only"^/    /weekday {Returns day of the week as integer (Monday is day 1)}^/    /yearday "Returns day of the year (Julian)"^/    /precise "High precision time"^/    /utc "Universal time (no zone)"^/    return: [date! time! integer!]^/]^/number?: make function! ["Returns true if the value is any type of number" value [any-type!]]^/object: make function! [^/    "Makes a new object from an evaluated spec"^/    spec [block!]^/]^/object?: make function! ["Returns true if the value is this type" value [any-type!]]^/odd?: make action! [^/    {Returns true if the number has a remainder of 1 when divided by 2}^/    number [number! money! char! time!]^/    return: [logic!]^/]^/offset-to-caret: make function! [^/    {Given a coordinate, returns the corresponding caret position}^/    face [object!]^/    pt [planar!]^/    return: [integer!]^/]^/offset-to-char: make function! [^/    {Given a coordinate, returns the corresponding character position}^/    face [object!]^/    pt [planar!]^/    return: [integer!]^/]^/offset?: make function! [^/    "Returns the offset between two series positions"^/    series1 [series!]^/    series2 [series!]^/]^/on-face-deep-change*: make function! ["Internal use only" owner word target action new index part state forced?^//local w diff? faces face modal? screen pane]^/op?: make function! ["Returns true if the value is this type" value [any-type!]]^/open: make action! [^/    {Opens a port; makes a new port from a specification if necessary}^/    port [port! file! url! block!]^/    /new "Create new file - if it exists, deletes it"^/    /read "Open for read access"^/    /write "Open for write access"^/    /seek "Optimize for random access"^/    /allow "Specificies right access attributes"^/    access [block!]^/]^/open?: make action! [^/    "Returns TRUE if port is open"^/    port [port!]^/]^/or~: make action! [^/    "Returns the first value ORed with the second"^/    value1 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/    value2 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/    return: [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]^/]^/os-info: make routine! [{Returns detailed operating system version information}]^/overlap?: make function! [^/    {Return TRUE if the two faces bounding boxes are overlapping}^/    A [object!] "First face"^/    B [object!] "Second face"^/    return: [logic!] "TRUE if overlapping"^/    /local A1 B1 A2 B2^/]^/pad: make function! [^/    "Pad a FORMed value on right side with spaces"^/    str "Value to pad, FORM it if not a string"^/    n [integer!] "Total size (in characters) of the new string"^/    /left "Pad the string on left side"^/    /with "Pad with char"^/    c [char!]^/    return: [string!] "Modified input string at head"^/]^/pair?: make function! ["Returns true if the value is this type" value [any-type!]]^/^/paren?: make function! ["Returns true if the value is this type" value [any-type!]]^/parse: make native! [^/    "Process a series using dialected grammar rules"^/    input [binary! any-block! any-string!]^/    rules [block!]^/    /case "Uses case-sensitive comparison"^/    /part "Limit to a length or position"^/    length [number! series!]^/    /trace^/    callback [function! [^/        event [word!]^/        match? [logic!]^/        rule [block!]^/        input [series!]^/        stack [block!]^/        return: [logic!]^/    ]]^/    return: [logic! block!]^/]^/parse-trace: make function! [^/    {Wrapper for parse/trace using the default event processor}^/    input [series!]^/    rules [block!]^/    /case "Uses case-sensitive comparison"^/    /part "Limit to a length or position"^/    limit [integer!]^/    return: [logic! block!]^/]^/path-thru: make function! [^/    {Returns the local disk cache path of a remote file}^/    url [url!] "Remote file address"^/    return: [file!]^/    /local so hash file path^/]^/path?: make function! ["Returns true if the value is this type" value [any-type!]]^/percent?: make function! ["Returns true if the value is this type" value [any-type!]]^/pick: make action! [^/    "Returns the series value at a given index"^/    series [series! port! bitset! pair! any-point! tuple! money! date! time! event!]^/    index [scalar! any-string! any-word! block! logic! time!]^/    return: [any-type!]^/]^/pick-stack: make routine! [^/    idx [integer!]^/]^/planar?: make function! ["Returns true if the value is any type of planar" value [any-type!]]^/point2D?: make function! ["Returns true if the value is this type" value [any-type!]]^/point3D?: make function! ["Returns true if the value is this type" value [any-type!]]^/poke: make action! [^/    {Replaces the series value at a given index, and returns the new value}^/    series [series! port! bitset!]^/    index [scalar! any-string! any-word! block! logic!]^/    value [any-type!]^/    return: [series! port! bitset!]^/]^/positive?: make native! [^/    "Returns TRUE if the number is positive"^/    number [number! money! time!]^/    return: [logic!]^/]^/power: make action! [^/    {Returns a number raised to a given power (exponent)}^/    number [number!] "Base value"^/    exponent [integer! float!] "The power (index) to raise the base value by"^/    return: [number!]^/]^/preprocessor: make object! [^/    exec: make object! [^/        config: make object! [^/            config-name: 'Windows^/            OS: 'Windows^/            OS-version: 0^/            ABI: none^/            link?: true^/            debug?: false^/            encap?: false^/            build-prefix: %""^/            build-basename: %/home/dk/static.red-lang.org/dl/auto/win/red-view-06mar26-698eac0d8.exe^/            build-suffix: none^/            format: 'PE^/            type: 'exe^/            target: 'IA-32^/            cpu-version: 6.0^/            verbosity: 0^/            sub-system: 'GUI^/            runtime?: true^/            use-natives?: false^/            debug-safe?: true^/            dev-mode?: false^/            need-main?: false^/            PIC?: false^/            base-address: none^/            dynamic-linker: none^/            syscall: 'Linux^/            export-ABI: none^/            stack-align-16?: false^/            literal-pool?: false^/            unicode?: false^/            red-pass?: true^/            red-only?: false^/            red-store-bodies?: true^/            red-strict-check?: true^/            red-tracing?: true^/            red-help?: true^/            redbin-compress?: false^/            legacy: none^/            gui-console?: true^/            libRed?: false^/            libRedRT?: false^/            libRedRT-update?: false^/            GUI-engine: 'native^/            draw-engine: none^/            modules: [View JSON CSV]^/            show: none^/            command-line: none^/            show-func-map?: false^/        ]^/    ]^/    protos: []^/    macros: [<none>]^/    stack: []^/    syms: []^/    depth: 0^/    active?: true^/    trace?: false^/    s: none^/    do-quit: func [][^/        case [^/            all [rebol system/options/args] [quit/return 1]^/            all [not rebol system/console] [throw/name 'halt-request 'console]^/            'else [halt]^/        ]^/    ]^/    throw-error: func [error [error!] cmd [issue!] code [block!] /local w][^/        prin ["*** Preprocessor Error in" mold cmd lf]^/        error/where: new-line/all reduce [cmd] no^/        print form :error^/        either system/console [throw/name 'halt-request 'console] [halt]^/    ]^/    syntax-error: func [s [block! paren!] e [block! paren!]][^/        print [^/            "*** Preprocessor Error: Syntax error^^/"^/            "*** Where:" trim/head mold/only copy/part s next e^/        ]^/        do-quit^/    ]^/    do-safe: func [code [block! paren!] /manual /with cmd [issue!] /local res t? src][^/        if t?: all [trace? not with] [^/            print [^/                "preproc: matched" mold/flat copy/part get code/2 get code/3 lf^/                "preproc: eval macro" copy/part mold/flat body-of first code 80^/            ]^/        ]^/        if error? set/any 'res try code [throw-error :res any [cmd #macro] code]^/        if all [^/            manual^/            any [^/                (type? src: get code/2) <> type? get/any 'res^/                not same? head src head get/any 'res^/            ]^/        ] [^/            print [^/                {*** Macro Error: [manual] macro not returning a position^^/}^/                "*** Where:" mold code^/            ]^/            do-quit^/        ]^/        if t? [print ["preproc: ==" mold get/any 'res]]^/        either unset? get/any 'res [[]] [:res]^/    ]^/    do-code: func [code [block! paren!] cmd [issue!] /local p][^/        clear syms^/        parse code [any [^/            p: set-word! (unless in exec p/1 [append syms p/1])^/            | skip^/        ]]^/        unless empty? syms [^/            exec: make exec append syms none^/            rebind-all^/        ]^/        do-safe/with bind to block! code exec cmd^/    ]^/    rebind-all: func [/local rule p][^/        protos: bind protos exec^/        parse macros rule: [^/            any [p: function! (bind body-of first p exec) | p: [block! | paren!] :p into rule | skip]^/        ]^/    ]^/    count-args: func [spec [block!] /block /local total pos][^/        total: either block [copy []] [0]^/        parse spec [^/            any [^/                pos: [word! | lit-word! | get-word!] (^/                    either block [append total type? pos/1] [total: total + 1]^/                )^/                | refinement! (return total)^/                | skip^/            ]^/        ]^/        total^/    ]^/    arg-mode?: func [spec [block!] idx [integer!]][^/        pick count-args/block spec idx^/    ]^/    func-arity?: func [spec [block!] /with path [path!] /block /local arity pos][^/        arity: either block [count-args/block spec] [count-args spec]^/        if path [^/            foreach word next path [^/                unless pos: find/tail spec to refinement! word [^/                    print [^/                        "*** Macro Error: unknown refinement^^/"^/                        "*** Where:" mold path^/                    ]^/                    do-quit^/                ]^/                either block^/                [append arity count-args/block pos]^/                [arity: arity + count-args pos]^/            ]^/        ]^/        arity^/    ]^/    value-path?: func [path [path!] /local value i item selectable][^/        selectable: make typeset! [^/            block! paren! path! lit-path! set-path! get-path!^/            object! port! error! map!^/        ]^/        repeat i length? path [^/            set/any 'value either i = 1 [get/any first path] [^/                set/any 'item pick path i^/                case [^/                    get-word? :item [set/any 'item get/any to word! item]^/                    paren? :item [set/any 'item do item]^/                ]^/                either integer? :item [pick value item] [select value :item]^/            ]^/            unless find selectable type? get/any 'value [^/                path: copy/part path i^/                break^/            ]^/        ]^/        reduce [path get/any 'value]^/    ]^/    fetch-next: func [code [block! paren!] /local i left item item2 value fn-spec path f-arity at-op? op-mode][^/        left: reduce [yes]^/        while [all [not tail? left not tail? code]] [^/            either not left/1 [^/                remove left^/            ] [^/                item: first code^/                f-arity: any [^/                    all [^/                        word? :item^/                        any-function? set/any 'value get/any :item^/                        func-arity?/block fn-spec: spec-of get/any :item^/                    ]^/                    all [^/                        path? :item^/                        set/any [path value] value-path? :item^/                        any-function? get/any 'value^/                        func-arity?/block/with^/                        fn-spec: spec-of :value^/                        at :item length? :path^/                    ]^/                ]^/                if at-op?: all [^/                    1 < length? code^/                    word? item2: second code^/                    op? get/any :item2^/                ] [^/                    if all [f-arity 1 < length? f-arity] [^/                        at-op?: word! = arg-mode? fn-spec 1^/                    ]^/                ]^/                case [^/                    at-op? [^/                        code: next code^/                        left/1: word! = arg-mode? spec-of get/any :item2 2^/                    ]^/                    f-arity [^/                        if op? get/any 'value [return skip code 2]^/                        remove left^/                        repeat i length? f-arity [insert at left i word! = f-arity/:i]^/                    ]^/                    not find [set-word! set-path!] type?/word item [^/                        remove left^/                    ]^/                ]^/            ]^/            code: next code^/        ]^/        code^/    ]^/    eval: func [code [block! paren!] cmd [issue!] /local after expr][^/        after: fetch-next code^/        expr: copy/part code after^/        if trace? [print ["preproc:" mold cmd mold expr]]^/        expr: do-code expr cmd^/        if trace? [print ["preproc: ==" mold expr]]^/        reduce [expr after]^/    ]^/    do-macro: func [name pos [block! paren!] arity [integer!] /local cmd saved p v res][^/        depth: depth + 1^/        saved: s^/        parse next pos [arity [s: macros | skip]]^/        cmd: make block! 1^/        append cmd name^/        insert/part tail cmd next pos arity^/        if trace? [print ["preproc: eval macro" mold cmd]]^/        p: next cmd^/        forall p [^/            switch type?/word v: p/1 [^/                word! [change p to lit-word! v]^/                path! [change/only p to lit-path! v]^/            ]^/        ]^/        if unset? set/any 'res do bind cmd exec [^/            print ["*** Macro Error: no value returned by" name "macro^^/"]^/            do-quit^/        ]^/        if trace? [print ["preproc: ==" mold :res]]^/        s: saved^/        s/1: :res^/        if positive? depth: depth - 1 [^/            saved: s^/            parse s [s: macros]^/            s: saved^/        ]^/        s/1^/    ]^/    register-macro: func [spec [block!] /local cnt rule p name macro pos valid? named?][^/        named?: set-word? spec/1^/        cnt: 0^/        rule: make block! 10^/        valid?: parse spec/3 [^/            any [^/                opt string!^/                opt block!^/                [word! (cnt: cnt + 1) | /local any word!]^/                opt [^/                    p: block! :p into [some word!]^/                ]^/            ]^/        ]^/        if any [^/            not valid?^/            all [^/                not named?^/                any [cnt <> 2 all [block? spec/1 empty? spec/1]]^/            ]^/        ] [^/            print [^/                "*** Macro Error: invalid specification^^/"^/                "*** Where:" mold copy/part spec 3^/            ]^/            do-quit^/        ]^/        either named? [^/            repend rule [^/                name: to lit-word! spec/1^/                to-paren compose [change/part s do-macro (:name) s (cnt) (cnt + 1)]^/                to get-word! 's^/            ]^/            append protos copy/part spec 4^/        ] [^/            macro: do bind copy/part next spec 3 exec^/            repend rule [^/                to set-word! 's^/                spec/1^/                to set-word! 'e^/                to-paren compose/deep either all [^/                    block? spec/3/1 find spec/3/1 'manual^/                ] [^/                    [s: do-safe/manual [(:macro) s e]]^/                ] [^/                    [s: change/part s do-safe [(:macro) s e] e]^/                ]^/                to get-word! 's^/            ]^/        ]^/        pos: tail macros^/        either tag? macros/1 [remove macros] [insert macros '|]^/        insert macros rule^/        new-line pos yes^/        exec: make exec protos^/        rebind-all^/    ]^/    reset: func [job [object! none!]][^/        exec: do [context [config: job]]^/        clear protos^/        insert clear macros <none>^/    ]^/    expand: func [^/        code [block! paren!] job [object! none!]^/        /clean^/        /local rule e pos cond value then else cases body keep? expr src saved file new^/    ][^/        either clean [reset job] [exec/config: job]^/        rule: [^/            any [^/                s: macros^/                | 'routine 2 skip^/                | #system skip^/                | #system-global skip^/                | s: #include (^/                    if active? [^/                        either all [not Rebol system/state/interpreted?] [^/                            saved: s^/                            attempt [expand load s/2 job]^/                            s: saved^/                            s/1: 'do^/                        ] [^/                            attempt [^/                                src: red/load-source/hidden clean-path join red/main-path s/2^/                                expand src job^/                            ]^/                        ]^/                    ]^/                )^/                | s: #include-binary [file! | string!] (^/                    if active? [^/                        either all [not Rebol system/state/interpreted?] [^/                            s/1: 'read/binary^/                            if string? s/2 [s/2: to-red-file s/2]^/                        ] [^/                            file: either string? s/2 [to-rebol-file s/2] [s/2]^/                            file: clean-path join red/main-path file^/                            change/part s read/binary file 2^/                        ]^/                    ]^/                )^/                | s: #if (set [cond e] eval next s s/1) :e [set then block! | (syntax-error s e)] e: (^/                    if active? [either cond [change/part s then e] [remove/part s e]]^/                ) :s^/                | s: #either (set [cond e] eval next s s/1) :e^/                [set then block! set else block! | (syntax-error s e)] e: (^/                    if active? [either cond [change/part s then e] [change/part s else e]]^/                ) :s^/                | s: #switch (set [cond e] eval next s s/1) :e [set cases block! | (syntax-error s e)] e: (^/                    if active? [^/                        body: any [select cases cond select cases #default]^/                        either body [change/part s body e] [remove/part s e]^/                    ]^/                ) :s^/                | s: #case [set cases block! | e: (syntax-error s e)] e: (^/                    if active? [^/                        until [^/                            set [cond cases] eval cases s/1^/                            any [cond tail? cases: next cases]^/                        ]^/                        either cond [change/part s cases/1 e] [remove/part s e]^/                    ]^/                ) :s^/                | s: #do (keep?: no) opt ['keep (keep?: yes)] [block! | (syntax-error s next s)] e: (^/                    if active? [^/                        pos: pick [3 2] keep?^/                        if trace? [print ["preproc: eval" mold s/:pos]]^/                        saved: s^/                        expr: do-code s/:pos s/1^/                        s: saved^/                        if all [keep? trace?] [print ["preproc: ==" mold expr]]^/                        either keep? [s: change/part s :expr e] [remove/part s e]^/                    ]^/                ) :s^/                | s: #local [block! | (syntax-error s next s)] e: (^/                    repend stack [negate length? macros tail protos]^/                    saved: s^/                    new: expand s/2 job^/                    s: saved^/                    change/part s new e^/                    clear take/last stack^/                    remove/part macros skip tail macros take/last stack^/                    if tail? next macros [macros/1: <none>]^/                ) :s^/                | s: #reset (reset job remove s) :s^/                | s: #trace [[^/                    ['on (trace?: on) | 'off (trace?: off)] (remove/part s 2) :s^/                ] | (syntax-error s next s)]^/                | s: #process [[^/                    'on (active?: yes remove/part s 2) :s^/                    | 'off (active?: no remove/part s 2) :s [to #process | to end (active?: yes)]^/                ] | (syntax-error s next s)]^/                | s: #macro [^/                    [set-word! | word! | lit-word! | block!] ['func | 'function] block! block!^/                    | (syntax-error s skip s 4)^/                ] e: (^/                    register-macro next s^/                    remove/part s e^/                ) :s^/                | pos: [block! | paren!] :pos into rule^/                | skip^/            ]^/        ]^/        unless Rebol [rule/1: 'while]^/        parse code rule^/        code^/    ]^/]^/prin: make native! [^/    "Outputs a value"^/    value [any-type!]^/]^/print: make native! [^/    "Outputs a value followed by a newline"^/    value [any-type!]^/]^/probe: make function! [^/    "Returns a value after printing its molded form"^/    value [any-type!]^/]^/profile: make function! [^/    {Profile the argument code, counting calls and their cumulative duration, then print a report}^/    code [any-type!] "Code to profile"^/    /by^/    cat [word!] "Sort by: 'name, 'count, 'time"^/    /local saved rank name cnt duration^/]^/put: make action! [^/    {Replaces the value following a key, and returns the new value}^/    series [series! port! map! object!]^/    key [scalar! any-string! all-word! binary!]^/    value [any-type!]^/    /case "Perform a case-sensitive search"^/    return: [series! port! map! object!]^/]^/pwd: make function! [{Displays the active directory path (Print Working Dir)}]^/q: make function! [^/    "Stops evaluation and exits the program"^/    /return status [integer!] "Return an exit status"^/]^/query: make action! [^/    "Returns information about a file"^/    target [file! port!]^/]^/quit: make function! [^/    "Stops evaluation and exits the program"^/    /return status [integer!] "Return an exit status"^/]^/quit-return: make routine! [^/    {Stops evaluation and exits the program with a given status}^/    status [integer!] "Process termination value to return"^/]^/quote: make function! [^/    "Return but don't evaluate the next value"^/    :value [any-type!]^/]^/random: make action! [^/    {Returns a random value of the same datatype; or shuffles series}^/    value "Maximum value of result (modified when series)"^/    /seed "Restart or randomize"^/    /secure "Returns a cryptographically secure random number"^/    /only "Pick a random value from a series"^/    return: [any-type!]^/]^/react: make function! [^/    {Defines a new reactive relation between two or more objects}^/    reaction [block! function!] "Reactive relation"^/    /link "Link objects together using a reactive relation"^/    objects [block!] "Objects to link together"^/    /unlink "Removes an existing reactive relation"^/    src [word! object! block!] "'all word, or a reactor or a list of reactors"^/    /later "Run the reaction on next change instead of now"^/    /with "Specifies an optional face object (internal use)"^/    ctx [object! set-word! none!] "Optional context for VID faces or target set-word"^/    return: [block! function! none!] {The reactive relation or NONE if no relation was processed}^/    /local objs found? rule item pos obj^/]^/react?: make function! [^/    {Returns a reactive relation if an object's field is a reactive source}^/    reactor [object!] "Object to check"^/    field [word!] "Field to check"^/    /target {Check if it's a target of an `is` reaction instead of a source}^/    return: [block! function! word! none!] "Returns reaction, type or NONE"^/    /local pos^/]^/reactor: make function! [spec [block!]]^/^/read: make action! [^/    "Reads from a file, URL, or other port"^/    source [file! url! port!]^/    /part {Partial read a given number of units (source relative)}^/    length [number!]^/    /seek "Read from a specific position (source relative)"^/    index [number!]^/    /binary "Preserves contents exactly"^/    /lines "Convert to block of strings"^/    /info^/    /as {Read with the specified encoding, default is 'UTF-8}^/    encoding [word!]^/]^/read-clipboard: make routine! [^/    "Return the contents of the system clipboard"^/    return: [any-type!] {false on failure, none if empty, otherwise: string!, block! of files!, or an image!}^/]^/read-thru: make function! [^/    "Reads a remote file through local disk cache"^/    url [url!] "Remote file address"^/    /update "Force a cache update"^/    /binary "Use binary mode"^/    /local path data^/]^/recycle: make native! [^/    {Recycles unused memory and returns memory amount still in use}^/    /on "Turns on garbage collector; returns nothing"^/    /off "Turns off garbage collector; returns nothing"^/    /info "Returns the number of GC passes since beginning"^/    return: [integer! unset!]^/]^/^/red-complete-input: make function! [^/    str [string!]^/    console? [logic!]^/    /local^/    word ptr result sys-word delim? len insert?^/    start end delimiters d w change?^/]^/reduce: make native! [^/    {Returns a copy of a block, evaluating all expressions}^/    value [any-type!]^/    /into {Put results in out block, instead of creating a new block}^/    out [any-block!] "Target block for results, when /into is used"^/]^/ref?: make function! ["Returns true if the value is this type" value [any-type!]]^/refinement?: make function! ["Returns true if the value is this type" value [any-type!]]^/reflect: make action! [^/    {Returns internal details about a value via reflection}^/    value [any-type!]^/    field [word!] {spec, body, words, etc. Each datatype defines its own reflectors}^/]^/register-scheme: make function! [^/    "Registers a new scheme"^/    spec [object!] "Scheme definition"^/    /native^/    dispatch [handle!]^/]^/rejoin: make function! [^/    "Reduces and joins a block of values."^/    block [block!] "Values to reduce and join"^/]^/relate: make function! [^/    {Defines a reactive relation whose result is assigned to a word}^/    'field [set-word!] {Set-word which will get set to the result of the reaction}^/    reaction [block!] "Reactive relation"^/    /local obj rule item^/]^/remainder: make action! [^/    {Returns what is left over when one value is divided by another}^/    value1 [number! money! char! pair! any-point! tuple! vector! time!] "The dividend (numerator)"^/    value2 [number! money! char! pair! any-point! tuple! vector! time!] "The divisor (denominator)"^/    return: [number! money! char! pair! any-point! tuple! vector! time!] "The remainder"^/]^/remove: make action! [^/    {Returns the series at the same index after removing a value}^/    series [series! port! bitset! map! none!]^/    /part {Removes a number of values, or values up to the given series index}^/    length [number! char! series!]^/    /key "Removes a key in map"^/    key-arg [scalar! any-string! any-word! binary! block!]^/    return: [series! port! bitset! map! none!]^/]^/remove-each: make native! [^/    {Removes values for each block that returns truthy value}^/    'word [word! block!] "Word or block of words to set each time"^/    data [series!] "The series to traverse (modified)"^/    body [block!] "Block to evaluate (return truthy value to remove)"^/]^/remove-event-func: make function! [^/    "Removes an event function previously added"^/    id [word! function!] "Handler name or function reference"^/    /local svh pos^/]^/rename: make action! [^/    "Rename a file"^/    from [port! file! url!]^/    to [port! file! url!]^/]^/repeat: make native! [^/    {Evaluates body a number of times, tracking iteration count}^/    'word [word!] "Iteration counter; not local to loop"^/    value [integer! float!] "Number of times to evaluate body"^/    body [block!]^/]^/repend: make function! [^/    {Appends a reduced value to a series and returns the series head}^/    series [series!]^/    value^/    /only "Appends a block value as a block"^/]^/replace: make function! [^/    "Replaces values in a series, in place"^/    series [any-block! any-string! binary! vector!] "The series to be modified"^/    pattern "Specific value or parse rule pattern to match"^/    value "New value, replaces pattern in the series"^/    /all "Replace all occurrences, not just the first"^/    /deep "Replace pattern in all sub-lists as well"^/    /case "Case-sensitive replacement"^/    /local parse? form? quote? deep? rule many? size seek active?^/]^/request-dir: make function! [^/    {Asks user to select a directory and returns full directory path (or block of paths)}^/    /title "Window title"^/    text [string!]^/    /dir "Set starting directory"^/    name [string! file!]^/    /filter "TBD: Block of filters (filter-name filter)"^/    list [block!]^/    /keep "Keep previous directory path"^/    /multi {TBD: Allows multiple file selection, returned as a block}^/]^/request-file: make function! [^/    {Asks user to select a file and returns full file path (or block of paths)}^/    /title "Window title"^/    text [string!]^/    /file "Default file name or directory"^/    name [string! file!]^/    /filter "Block of filters (filter-name filter)"^/    list [block!]^/    /save "File save mode"^/    /multi {Allows multiple file selection, returned as a block}^/]^/request-font: make function! [^/    "Requests a font object"^/    /font "Sets the selected font"^/    ft [object!]^/    /mono "Show monospaced font only"^/]^/return: make native! [^/    "Returns a value from a function"^/    value [any-type!]^/]^/reverse: make action! [^/    {Reverses the order of elements; returns at same position}^/    series [series! port! pair! any-point! tuple!]^/    /part "Limits to a given length or position"^/    length [number! series!]^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    return: [series! port! pair! any-point! tuple!]^/]^/^/round: make action! [^/    {Returns the nearest integer. Halves round up (away from zero) by default}^/    n [number! money! time! pair! any-point!]^/    /to {Return the nearest multiple of the scale parameter}^/    scale [number! money! time! pair! any-point!] "If zero, returns N unchanged"^/    /even "Halves round toward even results"^/    /down {Round toward zero, ignoring discarded digits. (truncate)}^/    /half-down "Halves round toward zero"^/    /floor "Round in negative direction"^/    /ceiling "Round in positive direction"^/    /half-ceiling "Halves round in positive direction"^/]^/routine: make function! [{Defines a function with a given Red spec and Red/System body} spec [block!] body [block!]]^/routine?: make function! ["Returns true if the value is this type" value [any-type!]]^/rtd-layout: make function! [^/    "Returns a rich-text face from a RTD source code"^/    spec [block!] "RTD source code"^/    /only "Returns only [text data] facets"^/    /with "Populate an existing face object"^/    face [object!] "Face object to populate"^/    return: [object! block!]^/]^/same?: make native! [^/    "Returns TRUE if two values have the same identity"^/    value1 [any-type!]^/    value2 [any-type!]^/]^/save: make function! [^/    {Saves a value, block, or other data to a file, URL, binary, or string}^/    where [file! url! string! binary! none!] "Where to save"^/    value [any-type!] "Value(s) to save"^/    /header {Provide a Red header block (or output non-code datatypes)}^/    header-data [block! object!]^/    /all "TBD: Save in serialized format"^/    /length {Save the length of the script content in the header}^/    /as {Specify the format of data; use NONE to save as plain text}^/    format [word! none!] "E.g. bmp, gif, jpeg, png, redbin, json, csv"^/    /local dst codec data suffix find-encoder? name only pos header-str k v^/]^/scalar?: make function! ["Returns true if the value is any type of scalar" value [any-type!]]^/scan: make function! [^/    {Returns the guessed type of the first serialized value from the input}^/    buffer [binary! string!] "Input UTF-8 buffer or string"^/    /next {Returns both the type and the input after the value}^/    /fast "Fast scanning, returns best guessed type"^/    return: [datatype! none!] {Recognized or guessed type, or NONE on empty input}^/]^/^/second: make function! ["Returns the second value in a series" s [series! tuple! pair! any-point! date! time!]]^/select: make action! [^/    {Find a value in a series and return the next value, or NONE}^/    series [series! any-object! map! none!]^/    value [any-type!]^/    /part "Limit the length of the search"^/    length [number! series!]^/    /only "Treat a series search value as a single value"^/    /case "Perform a case-sensitive search"^/    /same {Use "same?" as comparator}^/    /any "TBD: Use * and ? wildcards in string searches"^/    /with "TBD: Use custom wildcards in place of * and ?"^/    wild [string!]^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    /last "Find the last occurrence of value, from the tail"^/    /reverse {Find the last occurrence of value, from the current index}^/    return: [any-type!]^/]^/series?: make function! ["Returns true if the value is any type of series" value [any-type!]]^/set: make native! [^/    "Sets the value(s) one or more words refer to"^/    word [any-word! block! object! any-path!] "Word, object, map path or block of words to set"^/    value [any-type!] "Value or block of values to assign to words"^/    /any {Allow UNSET as a value rather than causing an error}^/    /case "Use case-sensitive comparison (path only)"^/    /only {Block or object value argument is set as a single value}^/    /some {None values in a block or object value argument, are not set}^/    return: [any-type!]^/]^/set-current-dir: make routine! ["Sets the platform's current process directory" path [file!]]^/set-env: make native! [^/    {Sets the value of an operating system environment variable (for current process)}^/    var [any-string! any-word!] "Variable to set"^/    value [string! none!] "Value to set, or NONE to unset it"^/]^/set-flag: make function! [^/    {Sets (or clears) a flag in a face object; Returns the /flags facet value}^/    face [object!] "Face where flag to set/clear"^/    flag [any-type!] "Flag to set/clear"^/    /clear "Clears the flag instead of setting it"^/    /toggle "Set it if unset, clears it otherwise"^/    /local flags pos^/]^/set-focus: make function! [^/    "Sets the focus on the argument face"^/    face [object!]^/    /local p^/]^/set-path?: make function! ["Returns true if the value is this type" value [any-type!]]^/set-quiet: make routine! [^/    {Set an object's field to a value without triggering eventual object's events}^/    word [any-type!]^/    value [any-type!]^/    return: [any-type!]^/]^/set-slot-quiet: make routine! [^/    {Set a value in series without triggering eventual owner's events}^/    series [any-type!]^/    value [any-type!]^/]^/set-word?: make function! ["Returns true if the value is this type" value [any-type!]]^/shift: make native! [^/    {Perform a bit shift operation. Right shift (decreasing) by default}^/    data [integer!]^/    bits [integer!]^/    /left "Shift bits to the left (increasing)"^/    /logical "Use logical shift (unsigned, fill with zero)"^/    return: [integer!]^/]^/shift-left: make routine! ["Shift bits to the left" data [integer!] bits [integer!]]^/shift-logical: make routine! ["Shift bits to the right (unsigned)" data [integer!] bits [integer!]]^/shift-right: make routine! ["Shift bits to the right" data [integer!] bits [integer!]]^/show: make function! [^/    "Display a new face or update it"^/    face [object! block!] "Face object to display"^/    /with "Link the face to a parent face"^/    parent [object!] "Parent face to link to"^/    /force "For internal use only!"^/    return: [logic!] "true if success"^/    /local show? f pending owner word target action new index part state handle new? p field pane^/]^/show-memory-stats: make function! [data [block!]^//local class used total i c frm unit]^/sign?: make native! [^/    {Returns sign of N as 1, 0, or -1 (to use as a multiplier)}^/    number [number! money! time!]^/    return: [integer!]^/]^/sin: make function! [^/    "Returns the trigonometric sine"^/    angle [float!] "Angle in radians"^/]^/sine: make native! [^/    "Returns the trigonometric sine"^/    angle [float! integer!]^/    /radians "DEPRECATED: use `sin` native instead"^/    return: [float!]^/]^/single?: make function! [^/    "Returns TRUE if the series length is 1"^/    series [series!]^/]^/size-text: make function! [^/    "Returns the area size of the text in a face"^/    face [object!] "Face containing the text to size"^/    /with "Provide a text string instead of face/text"^/    text [string!] "Text to measure"^/    return: [point2D! none!] "Return the text's size or NONE if failed"^/    /local h^/]^/size?: make native! [^/    "Returns the size of a file content"^/    file [file!]^/    return: [integer! none!]^/]^/skip: make action! [^/    "Returns the series relative to the current index"^/    series [series! port!]^/    offset [integer! pair!]^/    return: [series! port!]^/]^/sort: make action! [^/    {Sorts a series (modified); default sort order is ascending}^/    series [series! port!]^/    /case "Perform a case-sensitive sort"^/    /skip "Treat the series as fixed size records"^/    size [integer!]^/    /compare "Comparator offset, block (TBD) or function"^/    comparator [integer! block! any-function!]^/    /part "Sort only part of a series"^/    length [number! series!]^/    /all "Compare all fields (used with /skip)"^/    /reverse "Reverse sort order"^/    /stable "Stable sorting"^/    return: [series!]^/]^/source: make function! [^/    "Print the source of a function"^/    'word [word! path!] "The name of the function"^/    /local val^/]^/spec-of: make function! [{Returns the spec of a value that supports reflection} value]^/split: make function! [^/    {Break a string series into pieces using the provided delimiters}^/    series [any-string!] dlm [string! char! bitset!] /local s^/    num^/]^/split-path: make function! [^/    [no-trace]^/    {Splits a file or URL path. Returns a block containing path and target}^/    target [file! url!]^/    /local dir pos^/]^/sqrt: make function! [^/    "Returns the square root of a number"^/    number [float! integer! percent!]^/    return: [float!]^/]^/square-root: make native! [^/    "Returns the square root of a number"^/    value [float! integer! percent!]^/    return: [float!]^/]^/stack-size?: make routine! [return: [integer!]]^/stats: make native! [^/    "Returns interpreter statistics"^/    /show "TBD:"^/    /info {Return detailed info: nodes/series/big x free/used/total, total, low-level heap}^/    return: [integer! block!]^/]^/stop-events: make function! [^/    "Stop the last opened event loop"^/]^/stop-reactor: make function! [^/    face [object!]^/    /deep^/    /local list pos f^/]^/strict-equal?: make native! [^/    {Returns TRUE if two values are equal, and also the same datatype}^/    value1 [any-type!]^/    value2 [any-type!]^/]^/string?: make function! ["Returns true if the value is this type" value [any-type!]]^/subtract: make action! [^/    "Returns the difference between two values"^/    value1 [scalar! vector!] "The minuend"^/    value2 [scalar! vector!] "The subtrahend"^/    return: [scalar! vector!] "The difference"^/]^/suffix?: make function! [^/    {Returns the suffix (extension) of a filename or url, or NONE if there is no suffix}^/    path [file! url! string! email!]^/]^/sum: make function! [^/    "Returns the sum of all values in a block"^/    values [block! vector! paren! hash!]^/    /local result value^/]^/swap: make action! [^/    {Swaps elements between two series or the same series}^/    series1 [series! port!]^/    series2 [series! port!]^/    return: [series! port!]^/]^/switch: make native! [^/    {Evaluates the first block following the value found in cases}^/    value [any-type!] "The value to match"^/    cases [block!]^/    /default {Specify a default block, if value is not found in cases}^/    case [block!] "Default block to evaluate"^/]^/system: }
         fast: unset
         trap: unset
         codec: unset
@@ -20256,18 +20256,18 @@ system: make object! [
         ]
     ]
 ]
-tag?: function ["Returns true if the value is this type" value [any-type!]]
-tail: action [
+tag?: make function! ["Returns true if the value is this type" value [any-type!]]
+tail: make action! [
     {Returns a series at the index after its last value}
     series [series! port!]
     return: [series! port!]
 ]
-tail?: action [
+tail?: make action! [
     "Returns true if a series is past its last value"
     series [series! port!]
     return: [logic!]
 ]
-take: action [
+take: make action! [
     "Removes and returns one or more elements"
     series [series! port! none!]
     /part "Specifies a length or end position"
@@ -20275,41 +20275,41 @@ take: action [
     /deep "Copy nested values"
     /last "Take it from the tail end"
 ]
-tan: function [
+tan: make function! [
     "Returns the trigonometric tangent"
     angle [float!] "Angle in radians"
 ]
-tangent: native [
+tangent: make native! [
     "Returns the trigonometric tangent"
     angle [float! integer!]
     /radians "DEPRECATED: use `tan` native instead"
     return: [float!]
 ]
-third: function ["Returns the third value in a series" s [series! tuple! date! point3D! time!]]
-throw: native [
+third: make function! ["Returns the third value in a series" s [series! tuple! date! point3D! time!]]
+throw: make native! [
     "Throws control back to a previous catch"
     value [any-type!] "Value returned from catch"
     /name "Throws to a named catch"
     word [word!]
 ]
-time-it: function [
+time-it: make function! [
     "Returns the time required to evaluate a block"
     body [block!]
     return: [time!]
     /local t0
 ]
-time?: function ["Returns true if the value is this type" value [any-type!]]
+time?: make function! ["Returns true if the value is this type" value [any-type!]]
 
-to: action [
+to: make action! [
     "Converts to a specified datatype"
     type [any-type!] "The datatype or example value"
     spec [any-type!] "The attributes of the new value"
 ]
-to-binary: function ["Convert to binary! value" value]
-to-bitset: function ["Convert to bitset! value" value]
-to-block: function ["Convert to block! value" value]
-to-char: function ["Convert to char! value" value]
-to-csv: function [
+to-binary: make function! ["Convert to binary! value" value]
+to-bitset: make function! ["Convert to bitset! value" value]
+to-block: make function! ["Convert to block! value" value]
+to-char: make function! ["Convert to char! value" value]
+to-csv: make function! [
     "Make CSV data from input value"
     data [block! map! object!] {May be block of fixed size records, block of block records, or map columns}
     /with "Delimiter to use (default is comma)"
@@ -20320,77 +20320,77 @@ to-csv: function [
     qt-char [char!] {Use different character for quotes than double quote (")}
     /local longest keyval? types value
 ]
-to-date: function ["Convert to date! value" value]
-to-email: function ["Convert to email! value" value]
-to-file: function ["Convert to file! value" value]
-to-float: function ["Convert to float! value" value]
-to-get-path: function ["Convert to get-path! value" value]
-to-get-word: function ["Convert to get-word! value" value]
-to-hash: function ["Convert to hash! value" value]
-to-hex: native [
+to-date: make function! ["Convert to date! value" value]
+to-email: make function! ["Convert to email! value" value]
+to-file: make function! ["Convert to file! value" value]
+to-float: make function! ["Convert to float! value" value]
+to-get-path: make function! ["Convert to get-path! value" value]
+to-get-word: make function! ["Convert to get-word! value" value]
+to-hash: make function! ["Convert to hash! value" value]
+to-hex: make native! [
     {Converts numeric value to a hex issue! datatype (with leading # and 0's)}
     value [integer!]
     /size "Specify number of hex digits in result"
     length [integer!]
     return: [issue!]
 ]
-to-image: function ["Convert to image! value" value]
-to-integer: function ["Convert to integer! value" value]
-to-issue: function ["Convert to issue! value" value]
-to-json: function [
+to-image: make function! ["Convert to image! value" value]
+to-integer: make function! ["Convert to integer! value" value]
+to-issue: make function! ["Convert to issue! value" value]
+to-json: make function! [
     "Convert Red data to a JSON string"
     data
     /pretty indent [string!] "Pretty format the output, using given indentation"
     /ascii "Force ASCII output (instead of UTF-8)"
     /local result
 ]
-to-lit-path: function ["Convert to lit-path! value" value]
-to-lit-word: function ["Convert to lit-word! value" value]
-to-local-date: function [
+to-lit-path: make function! ["Convert to lit-path! value" value]
+to-lit-word: make function! ["Convert to lit-word! value" value]
+to-local-date: make function! [
     "Returns the date with local zone"
     date [date!]
     return: [date!]
 ]
-to-local-file: native [
+to-local-file: make native! [
     {Converts a Red file path to the local system file path}
     path [file! string!]
     /full {Prepends current dir for full path (for relative paths only)}
     return: [string!]
 ]
-to-logic: function ["Convert to logic! value" value]
-to-map: function ["Convert to map! value" value]
-to-money: function ["Convert to money! value" value]
-to-none: function ["Convert to none! value" value]
-to-pair: function ["Convert to pair! value" value]
-to-paren: function ["Convert to paren! value" value]
-to-path: function ["Convert to path! value" value]
-to-percent: function ["Convert to percent! value" value]
-to-point2D: function ["Convert to point2D! value" value]
-to-point3D: function ["Convert to point3D! value" value]
-to-red-file: function [
+to-logic: make function! ["Convert to logic! value" value]
+to-map: make function! ["Convert to map! value" value]
+to-money: make function! ["Convert to money! value" value]
+to-none: make function! ["Convert to none! value" value]
+to-pair: make function! ["Convert to pair! value" value]
+to-paren: make function! ["Convert to paren! value" value]
+to-path: make function! ["Convert to path! value" value]
+to-percent: make function! ["Convert to percent! value" value]
+to-point2D: make function! ["Convert to point2D! value" value]
+to-point3D: make function! ["Convert to point3D! value" value]
+to-red-file: make function! [
     {Converts a local system file path to a Red file path}
     path [file! string!]
     return: [file!]
     /local colon? slash? len i c dst
 ]
-to-ref: function ["Convert to ref! value" value]
-to-refinement: function ["Convert to refinement! value" value]
-to-set-path: function ["Convert to set-path! value" value]
-to-set-word: function ["Convert to set-word! value" value]
-to-string: function ["Convert to string! value" value]
-to-tag: function ["Convert to tag! value" value]
-to-time: function ["Convert to time! value" value]
-to-tuple: function ["Convert to tuple! value" value]
-to-typeset: function ["Convert to typeset! value" value]
-to-unset: function ["Convert to unset! value" value]
-to-url: function ["Convert to url! value" value]
-to-UTC-date: function [
+to-ref: make function! ["Convert to ref! value" value]
+to-refinement: make function! ["Convert to refinement! value" value]
+to-set-path: make function! ["Convert to set-path! value" value]
+to-set-word: make function! ["Convert to set-word! value" value]
+to-string: make function! ["Convert to string! value" value]
+to-tag: make function! ["Convert to tag! value" value]
+to-time: make function! ["Convert to time! value" value]
+to-tuple: make function! ["Convert to tuple! value" value]
+to-typeset: make function! ["Convert to typeset! value" value]
+to-unset: make function! ["Convert to unset! value" value]
+to-url: make function! ["Convert to url! value" value]
+to-UTC-date: make function! [
     "Returns the date with UTC zone"
     date [date!]
     return: [date!]
 ]
-to-word: function ["Convert to word! value" value]
-trace: function [
+to-word: make function! ["Convert to word! value" value]
+trace: make function! [
     {Runs argument code and prints an evaluation trace; also turns on/off tracing}
     code [any-type!] "Code to trace or tracing mode (logic!)"
     /raw {Switch to raw interpreter events tracing (incompatible with other modes)}
@@ -20399,8 +20399,8 @@ trace: function [
     /debug {Used internally to debug the tracer itself (outputs all events)}
     /local bool
 ]
-tracing?: routine []
-transcode: native [
+tracing?: make routine! []
+transcode: make native! [
     {Translates UTF-8 binary source to values. Returns one or several values in a block}
     src [binary! string!] {UTF-8 input buffer; string argument will be UTF-8 encoded}
     /next {Translate next complete value (blocks as single value)}
@@ -20432,11 +20432,11 @@ transcode: native [
     ]
     return: [block!]
 ]
-transcode-trace: function [
+transcode-trace: make function! [
     {Shortcut function for transcoding while tracing all lexer events}
     src [binary! string!]
 ]
-trim: action [
+trim: make action! [
     "Removes space from a string or NONE from a block"
     series [series! port!]
     /head "Removes only from the head"
@@ -20447,20 +20447,20 @@ trim: action [
     /with "Same as /all, but removes characters in 'str'"
     str [char! string! binary! integer!]
 ]
-try: native [
+try: make native! [
     {Tries to DO a block and returns its value or an error}
     block [block!]
     /all {Catch also BREAK, CONTINUE, RETURN, EXIT and THROW exceptions}
     /keep {Capture and save the call stack in the error object}
 ]
-tuple?: function ["Returns true if the value is this type" value [any-type!]]
-type?: native [
+tuple?: make function! ["Returns true if the value is this type" value [any-type!]]
+type?: make native! [
     "Returns the datatype of a value"
     value [any-type!]
     /word "Return a word value, rather than a datatype value"
 ]
-typeset?: function ["Returns true if the value is this type" value [any-type!]]
-union: native [
+typeset?: make function! ["Returns true if the value is this type" value [any-type!]]
+union: make native! [
     "Returns the union of two data sets"
     set1 [block! hash! string! bitset! typeset!]
     set2 [block! hash! string! bitset! typeset!]
@@ -20469,7 +20469,7 @@ union: native [
     size [integer!]
     return: [block! hash! string! bitset! typeset!]
 ]
-unique: native [
+unique: make native! [
     "Returns the data set with duplicates removed"
     set [block! hash! string!]
     /case "Use case-sensitive comparison"
@@ -20477,34 +20477,34 @@ unique: native [
     size [integer!]
     return: [block! hash! string!]
 ]
-unless: native [
+unless: make native! [
     {If conditional expression is falsy, evaluate block; else return NONE}
     cond [any-type!]
     then-blk [block!]
 ]
-unset: native [
+unset: make native! [
     "Unsets the value of a word in its current context"
     word [word! block!] "Word or block of words"
 ]
-unset?: function ["Returns true if the value is this type" value [any-type!]]
-until: native [
+unset?: make function! ["Returns true if the value is this type" value [any-type!]]
+until: make native! [
     "Evaluates body until it is truthy"
     body [block!]
 ]
-unview: function [
+unview: make function! [
     "Close last opened window view"
     /all "Close all views"
     /only "Close a given view"
     face [object!] "Window view to close"
     /local all? svs pane
 ]
-update: action [
+update: make action! [
     {Updates external and internal states (normally after read/write)}
     port [port!]
 ]
-update-font-faces: function ["Internal Use Only" parent [block! none!]
+update-font-faces: make function! ["Internal Use Only" parent [block! none!]
 /local f]
-uppercase: native [
+uppercase: make native! [
     "Converts string of characters to uppercase"
     string [any-string! char!] "Value to convert (modified when series)"
     /part "Limits to a given length or position"
@@ -20512,15 +20512,15 @@ uppercase: native [
     return: [any-string! char!]
 ]
 
-url?: function ["Returns true if the value is this type" value [any-type!]]
-value?: native [
+url?: make function! ["Returns true if the value is this type" value [any-type!]]
+value?: make native! [
     "Returns TRUE if the word has a value"
     value [word!]
     return: [logic!]
 ]
-values-of: function [{Returns the list of values of a value that supports reflection} value]
-vector?: function ["Returns true if the value is this type" value [any-type!]]
-view: function [
+values-of: make function! [{Returns the list of values of a value that supports reflection} value]
+vector?: make function! ["Returns true if the value is this type" value [any-type!]]
+view: make function! [
     {Displays a window view from a layout block or from a window face}
     spec [block! object!] "Layout block or face object"
     /tight "Zero offset and origin"
@@ -20532,12 +20532,12 @@ view: function [
     /no-sync "Requires `show` calls to refresh faces"
     /local sync? result
 ]
-wait: native [
+wait: make native! [
     "Waits for a duration in seconds or specified time"
     value [number! time! block! none!]
     /all "Returns all events in a block"
 ]
-what: function [
+what: make function! [
     "Lists all functions, or search for values"
     /with "Search all values that contain text in their name"
     text [word! string!]
@@ -20545,25 +20545,25 @@ what: function [
     /buffer {Buffer and return output, rather than printing results}
     /local found-at-least-one? word val
 ]
-what-dir: function [
+what-dir: make function! [
     "Returns the active directory path"
     /local path
 ]
-while: native [
+while: make native! [
     {Evaluates body as long as condition block evaluates to truthy value}
     cond [block!] "Condition block to evaluate on each iteration"
     body [block!] "Block to evaluate on each iteration"
 ]
-within?: function [
+within?: make function! [
     {Return TRUE if the point is within the rectangle bounds}
     point [planar!] "XY position"
     offset [planar!] "Offset of area"
     size [planar!] "Size of area"
     return: [logic!]
 ]
-word?: function ["Returns true if the value is this type" value [any-type!]]
-words-of: function [{Returns the list of words of a value that supports reflection} value]
-write: action [
+word?: make function! ["Returns true if the value is this type" value [any-type!]]
+words-of: make function! [{Returns the list of words of a value that supports reflection} value]
+write: make action! [
     "Writes to a file, URL, or other port"
     destination [file! url! port!]
     data [any-type!]
@@ -20580,19 +20580,19 @@ write: action [
     /as {Write with the specified encoding, default is 'UTF-8}
     encoding [word!]
 ]
-write-clipboard: routine [
+write-clipboard: make routine! [
     "Write content to the system clipboard"
     data [any-type!] "string!, block! of files!, an image! or none!"
     return: [logic!] "indicates success"
 ]
-write-stdout: routine ["Write data to STDOUT" data [any-type!]]
-xor~: action [
+write-stdout: make routine! ["Write data to STDOUT" data [any-type!]]
+xor~: make action! [
     {Returns the first value exclusive ORed with the second}
     value1 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]
     value2 [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]
     return: [logic! integer! char! bitset! binary! typeset! pair! tuple! vector! any-point!]
 ]
-zero?: native [
+zero?: make native! [
     "Returns TRUE if the value is zero"
     value [number! money! pair! time! char! tuple! any-point!]
     return: [logic!]
