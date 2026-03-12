@@ -6,6 +6,7 @@ use lsp_types::*;
 use ropey::Rope;
 use tree_sitter::Parser;
 use rust_embed::Embed;
+use std::str::FromStr;
 
 use crate::analyzer;
 
@@ -268,7 +269,11 @@ impl RedLanguageServer {
         for line_num in lines_to_parse {
             if let Some(document) = self.ctx.documents.get(&uri) {
                 let edited_line = document.content.line(line_num).to_string();
-                self.ctx.parse_line_and_insert_symbols(&edited_line);
+                let str = match edited_line.rfind(|c| c == ' ' || c == '\t') {  // exclude last word which is editing
+                        Some(idx) => &edited_line[..idx],
+                        None => "", // no space or tab → return empty
+                    };
+                self.ctx.parse_line_and_insert_symbols(str);
             }
         }
     }
@@ -286,20 +291,95 @@ impl RedLanguageServer {
         if line_content.is_empty() {return None};
 
         let cursor_col = position.character as usize;
-        let _byte_pos = self.get_byte_offset(uri, position);
+        let byte_pos = self.get_byte_offset(uri, position);
 
         // 提取要跳转的符号或路径
-        let _symbol_path = if let Some(path) = self.extract_object_path(&line_content, cursor_col) {
+        let symbol_path = if let Some((path, _member_prefix)) = self.extract_object_path(&line_content, cursor_col) {
             // 对象路径，如 "a/b/c"
-            path.0
+            path
         } else {
             // 单个符号名
             self.get_word_at_position(&line_content, cursor_col)
         };
 
+        if symbol_path.is_empty() {
+            return None;
+        }
+
+        log::info!("goto definition for: {} at byte {}", symbol_path, byte_pos);
+
         // 查找定义
+        let file_path = uri.to_string();
+        let (obj, is_func, member_name) = self.ctx.find_obj(&symbol_path, byte_pos, &file_path);
+
+        if let Some(obj_node) = obj {
+            // 找到对象定义
+            log::info!("found object: {} at {} {:?}", obj_node.name, obj_node.file_path, obj_node.byte_range);
+
+            // 将字节范围转换为 LSP 位置
+            let range = self.byte_range_to_lsp_range(&obj_node.file_path, obj_node.byte_range)?;
+
+            let target_uri = if obj_node.file_path.starts_with("builtin://") {
+                // 内置定义，尝试找到源文件
+                uri.clone()
+            } else {
+                Uri::from_str(&obj_node.file_path).unwrap_or_else(|_| uri.clone())
+            };
+
+            return Some(GotoDefinitionResponse::Scalar(Location {
+                uri: target_uri,
+                range,
+            }));
+        }
+
+        if is_func {
+            // 找到函数成员，需要查找该成员的定义位置
+            log::info!("found function member: {:?}", member_name);
+            // 对于函数成员，我们需要查找其所在对象的定义
+            // TODO: 如果成员有独立的定义位置信息，可以返回该位置
+        }
 
         None
+    }
+
+    /// 将字节范围转换为 LSP 位置范围
+    fn byte_range_to_lsp_range(&self, file_path: &str, byte_range: (usize, usize)) -> Option<Range> {
+        // 尝试从 documents 中获取文件内容
+        let uri = Uri::from_str(file_path).ok()?;
+
+        if let Some(document) = self.ctx.documents.get(&uri) {
+            let start_pos = self.byte_to_position(&document.content, byte_range.0);
+            let end_pos = self.byte_to_position(&document.content, byte_range.1);
+            return Some(Range {
+                start: start_pos,
+                end: end_pos,
+            });
+        }
+
+        // 如果文件不在打开的文档中，尝试从文件读取
+        if let Ok(content) = std::fs::read_to_string(file_path) {
+            let rope = Rope::from_str(&content);
+            let start_pos = self.byte_to_position(&rope, byte_range.0);
+            let end_pos = self.byte_to_position(&rope, byte_range.1);
+            return Some(Range {
+                start: start_pos,
+                end: end_pos,
+            });
+        }
+
+        None
+    }
+
+    /// 将字节偏移量转换为 LSP 位置
+    fn byte_to_position(&self, rope: &Rope, byte_offset: usize) -> Position {
+        let char_offset = rope.byte_to_char(byte_offset.min(rope.len_bytes()));
+        let line = rope.char_to_line(char_offset);
+        let line_start_char = rope.line_to_char(line);
+        let col = char_offset - line_start_char;
+        Position {
+            line: line as u32,
+            character: col as u32,
+        }
     }
 
     fn handle_completion(&mut self, params: CompletionParams) -> Option<lsp_types::CompletionResponse> {
@@ -659,9 +739,9 @@ fn get_object_completion_items(members: &Vec<analyzer::ObjectMember>) -> Vec<lsp
         .iter()
         .map(|member| {
             let kind = match member.member_type {
-                analyzer::MemberType::Function => lsp_types::CompletionItemKind::FUNCTION,
+                analyzer::MemberType::Function => lsp_types::CompletionItemKind::METHOD,
                 analyzer::MemberType::Object => lsp_types::CompletionItemKind::CLASS,
-                analyzer::MemberType::Value => lsp_types::CompletionItemKind::VARIABLE,
+                analyzer::MemberType::Value => lsp_types::CompletionItemKind::VALUE,
                 _ => lsp_types::CompletionItemKind::VARIABLE,
             };
 

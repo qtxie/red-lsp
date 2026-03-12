@@ -5,6 +5,7 @@ use tree_sitter::{Tree, TreeCursor};
 use compact_str::CompactString;
 use fast_radix_trie::StringRadixMap;
 use std::fs;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use url::Url;
 use std::collections::BTreeMap;
@@ -83,8 +84,8 @@ pub struct ObjectGraph {
     pub objects: HashMap<String, Rc<RefCell<ObjectNode>>>,
     /// 对象名称 -> 该名称的所有对象作用域路径 (使用 HashSet 加速移除)
     pub name_to_scopes: HashMap<String, HashSet<String>>,
-    /// 有序映射，用于快速查找字节位置所在的作用域 (start_byte -> scope_path)
-    range_map: BTreeMap<usize, String>,
+    /// 文件路径 -> 该文件的 range_map (start_byte -> scope_path)
+    file_range_maps: HashMap<String, BTreeMap<usize, String>>,
     /// 文件路径 -> 该文件中的所有对象作用域路径，用于快速移除
     file_to_scopes: HashMap<String, Vec<String>>,
     /// 作用域路径 -> 对象名称，用于快速从 name_to_scopes 中移除
@@ -96,7 +97,7 @@ impl ObjectGraph {
         Self {
             objects: HashMap::new(),
             name_to_scopes: HashMap::new(),
-            range_map: BTreeMap::new(),
+            file_range_maps: HashMap::new(),
             file_to_scopes: HashMap::new(),
             scope_to_name: HashMap::new(),
         }
@@ -105,6 +106,7 @@ impl ObjectGraph {
     pub fn get(&self, path: &str) -> Option<&Rc<RefCell<ObjectNode>>> {
         self.objects.get(path)
     }
+
     /// 添加对象
     pub fn add_object(&mut self, name: &String, scope_path: String, obj: ObjectNode) {
         let mut obj = obj;
@@ -114,8 +116,11 @@ impl ObjectGraph {
 
         // 记录名称到作用域的映射 (使用 HashSet)
         self.name_to_scopes.entry(name.clone()).or_insert_with(HashSet::new).insert(scope_path.clone());
-        // 同时插入到 range_map 中，用于快速查找
-        self.range_map.insert(obj.byte_range.0, scope_path.clone());
+        // 同时插入到该文件的 range_map 中，用于快速查找
+        self.file_range_maps
+            .entry(file_path.clone())
+            .or_insert_with(BTreeMap::new)
+            .insert(obj.byte_range.0, scope_path.clone());
         // 记录文件到作用域的映射，用于快速移除
         self.file_to_scopes.entry(file_path).or_insert_with(Vec::new).push(scope_path.clone());
         // 记录作用域到名称的映射，用于快速从 name_to_scopes 中移除
@@ -124,11 +129,16 @@ impl ObjectGraph {
     }
 
     /// 根据字节位置查找当前所在的作用域（从内到外）
-    pub fn find_scopes_at_position(&self, byte_pos: usize) -> Vec<&Rc<RefCell<ObjectNode>>> {
-        // 使用 range_map 快速查找：找到所有 start_byte <= byte_pos 的作用域
+    pub fn find_scopes_at_position(&self, byte_pos: usize, file_path: &str) -> Vec<&Rc<RefCell<ObjectNode>>> {
+        // 使用对应文件的 range_map 快速查找
+        let Some(range_map) = self.file_range_maps.get(file_path) else {
+            return Vec::new();
+        };
+
+        // 找到所有 start_byte <= byte_pos 的作用域
         // 然后过滤出 end_byte >= byte_pos 的作用域
         // range(..=byte_pos).rev() 从后往前遍历，已经是内层作用域在前，无需再排序
-        self.range_map
+        range_map
             .range(..=byte_pos)
             .rev()
             .filter_map(|(_, scope_path)| {
@@ -160,22 +170,14 @@ impl ObjectGraph {
             }
         }
 
-        // 重建 range_map
-        self.rebuild_range_map();
-    }
-
-    /// 重建 range_map
-    fn rebuild_range_map(&mut self) {
-        self.range_map.clear();
-        for (scope_path, obj) in &self.objects {
-            self.range_map.insert(obj.borrow().byte_range.0, scope_path.clone());
-        }
+        // 移除该文件的 range_map
+        self.file_range_maps.remove(file_path);
     }
 
     /// 解析对象路径并找到对应的对象
     /// path: "a" 或 "a/b" 等
-    /// current_scope: 当前所在的作用域路径
-    pub fn resolve_object_path(&self, path: &str, current_scope: &str) -> (Option<&Rc<RefCell<ObjectNode>>>, bool, Option<String>) {
+    /// current_scope: 当前所在的作用域对象
+    pub fn resolve_object_path(&self, path: &str, current_scope: &Rc<RefCell<ObjectNode>>) -> (Option<Rc<RefCell<ObjectNode>>>, bool, Option<String>) {
         // 将路径分割为部分
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         if parts.is_empty() {
@@ -183,24 +185,23 @@ impl ObjectGraph {
         }
 
         // 从当前作用域开始查找
-        let mut current_path = current_scope.to_string();
-        let mut parent_obj: Option<&Rc<RefCell<ObjectNode>>> = None;
+        let mut current_obj = current_scope.clone();
 
         for (i, part) in parts.iter().enumerate() {
             // 查找在当前路径下名为 part 的对象
-            let found = self.find_child_object(&current_path, part);
+
+            let found = self.find_child_object(current_scope, part);
 
             if let Some(obj) = found {
                 log::info!("resolve_object_path find: {} - {}", part, i);
                 if i == parts.len() - 1 {
                     // 最后一个部分，返回对象
-                    return (Some(obj), true, None);
+                    return (Some(obj.clone()), true, None);
                 }
-                parent_obj = found;
-                current_path = obj.borrow().scope_path.clone();
+                current_obj = obj.clone();
             } else {
                 // part might be a function
-                return (parent_obj, false, Some(part.to_string()));
+                return (Some(current_obj), false, Some(part.to_string()));
             }
         }
 
@@ -208,28 +209,10 @@ impl ObjectGraph {
     }
 
     /// 在指定作用域下查找子对象
-    fn find_child_object(&self, parent_scope: &str, child_name: &str) -> Option<&Rc<RefCell<ObjectNode>>> {
+    fn find_child_object(&self, parent_scope: &Rc<RefCell<ObjectNode>>, child_name: &str) -> Option<&Rc<RefCell<ObjectNode>>> {
         // 获取所有同名对象
-        let scopes = self.name_to_scopes.get(child_name)?;
-        log::info!("find_child_object: {} -- {:?}", child_name, scopes);
-        // 查找父作用域匹配的对象
-        for scope in scopes {
-            // 检查是否是直接子对象
-            if scope == child_name && parent_scope.is_empty() {
-                // 顶层对象
-                return self.objects.get(scope);
-            }
-
-            // 检查父作用域是否匹配
-            if let Some(parent_end) = scope.rfind('/') {
-                let parent = &scope[..parent_end];
-                if parent == parent_scope {
-                    return self.objects.get(scope);
-                }
-            }
-        }
-
-        None
+        let scope_path = format!("{}/{}", parent_scope.borrow().scope_path, child_name);
+        self.objects.get(&scope_path)
     }
 }
 
@@ -257,7 +240,7 @@ impl Ctx {
         let lang: tree_sitter::Language = lang.into();
         for kind_name in [
             "issue", "file", "make", "word", "set_word", "function", "does", "context",
-            "block", "path", "set_path"] {
+            "block", "path", "set_path", "refinement"] {
             node_kind_ids.insert(kind_name, lang.id_for_node_kind(kind_name, true));
         }
 
@@ -308,14 +291,15 @@ impl Ctx {
     /// 从 spec 块中提取 refinements
     fn extract_refinements_from_block(&self, source_code: &str, block_node: tree_sitter::Node) -> Option<Vec<ObjectMember>> {
         let mut cursor = block_node.walk();
+        let kind_refinement = self.get_kind_id("refinement");
         if cursor.goto_first_child() {
             let mut results = Vec::new();
             loop {
                 let node = cursor.node();
-                if node.kind() == "refinement" {
+                if node.kind_id() == kind_refinement {
                     if let Some(text) = get_node_text(source_code, &node) {
                         let ref_name = text.trim_start_matches('/');
-                        if !ref_name.is_empty() {
+                        if !ref_name.is_empty() && ref_name != "local" {
                             results.push(ObjectMember {
                                 name: CompactString::from(ref_name),
                                 member_type: MemberType::Value,
@@ -369,14 +353,13 @@ impl Ctx {
     }
 
     /// 查找对象成员补全
-    pub fn find_members(&self, object_path: &str, current_byte_pos: usize, prefix: &str) -> Vec<ObjectMember> {
+    pub fn find_members(&self, object_path: &str, current_byte_pos: usize, prefix: &str, file_path: &str) -> Vec<ObjectMember> {
         // 首先找到当前光标所在的作用域
-        let scopes = self.object_graph.find_scopes_at_position(current_byte_pos);
-
+        let scopes = self.object_graph.find_scopes_at_position(current_byte_pos, file_path);
+log::info!("find scopes: {:?}", scopes);
         // 尝试从当前作用域解析对象路径
         for scope in &scopes {
-            let scope_path = scope.borrow().scope_path.clone();
-            match self.get_members_or_refiments(object_path, prefix, &scope_path) {
+            match self.get_members_or_refiments(object_path, prefix, scope) {
                 Some(results) => return results,
                 None => break,
             }
@@ -385,51 +368,53 @@ impl Ctx {
         Vec::new()
     }
 
-    pub fn find_obj(&self, word: &str, start_byte: usize) -> (Option<ObjectNode>, bool) {
+    /// 查找对象或成员的定义位置
+    /// 返回：(对象节点，是否为函数，成员名称)
+    pub fn find_obj(&self, word: &str, start_byte: usize, file_path: &str) -> (Option<ObjectNode>, bool, Option<String>) {
         // 首先从 object_graph 查找
         // 首先找到当前光标所在的作用域
-        let scopes = self.object_graph.find_scopes_at_position(start_byte);
+        let scopes = self.object_graph.find_scopes_at_position(start_byte, file_path);
 
         // 尝试从当前作用域解析对象路径
         for scope in &scopes {
-            let scope_path = scope.borrow().scope_path.clone();
-            let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &scope_path);
+            let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, scope);
             if is_found {
-                return (obj.map(|v| v.borrow().clone()), false);
+                return (obj.map(|v| v.borrow().clone()), false, member_name);
             }
         }
         // 从 document 的 root_object 查找
         if let Some(uri) = &self.current_uri {
             if let Some(document) = self.documents.get(uri) {
-                let root_obj = document.root_object.borrow();
-                let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &root_obj.name);
+                let root_obj = document.root_object.clone();
+                let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &root_obj);
                 if is_found {
-                    return (obj.map(|v| v.borrow().clone()), false);
+                    return (obj.map(|v| v.borrow().clone()), false, member_name);
                 } else {
-                    if let Some(member) = root_obj.members.get(word) && member.member_type == MemberType::Function {
-                       return (None, true);
+                    if let Some(member) = document.root_object.borrow().members.get(word) && member.member_type == MemberType::Function {
+                       return (None, true, Some(member.name.to_string()));
                     }
                 }
             }
         }
 
         // 从 builtin_ctx 查找
-        let builtin = self.builtin_ctx.borrow();
-        let (obj, is_found, _) = self.object_graph.resolve_object_path(word, &builtin.name);
+        let builtin = self.builtin_ctx.clone();
+        let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &builtin);
         if is_found {
-            return (obj.map(|v| v.borrow().clone()), false);
+            return (obj.map(|v| v.borrow().clone()), false, member_name);
         } else {
-            if let Some(member) = builtin.members.get(word) && member.member_type == MemberType::Function {
-                return (None, true);
+            if let Some(member) = self.builtin_ctx.borrow().members.get(word) && member.member_type == MemberType::Function {
+                return (None, true, Some(member.name.to_string()));
             }
         }
-        (None, false)
+        (None, false, None)
     }
 
     /// 获取对象成员补全
     pub fn get_object_completions(&self, object_path: &str, current_byte_pos: usize, prefix: &str, file_uri: &Uri) -> Vec<ObjectMember> {
         // 首先从 object_graph 查找
-        let results = self.find_members(object_path, current_byte_pos, prefix);
+        let file_path = file_uri.to_string();
+        let results = self.find_members(object_path, current_byte_pos, prefix, &file_path);
         if !results.is_empty() {
             return results;
         }
@@ -437,8 +422,8 @@ impl Ctx {
         // 从 document 的 root_object 查找
         log::info!("get from opened file");
         if let Some(document) = self.documents.get(file_uri) {
-            let root_obj = document.root_object.borrow();
-            if let Some(results) = self.get_members_from_object(object_path, prefix, &*root_obj) {
+            let root_obj = document.root_object.clone();
+            if let Some(results) = self.get_members_from_object(object_path, prefix, &root_obj) {
                 log::info!("current doc result: {:?}", results);
                 return results;
             }
@@ -446,8 +431,8 @@ impl Ctx {
 
         // 从 builtin_ctx 查找
         log::info!("get from builtin");
-        let builtin = self.builtin_ctx.borrow();
-        if let Some(results) = self.get_members_from_object(object_path, prefix, &*builtin) {
+        let builtin = self.builtin_ctx.clone();
+        if let Some(results) = self.get_members_from_object(object_path, prefix, &builtin) {
             log::info!("builtin result: {:?}", results);
             return results;
         }
@@ -459,16 +444,16 @@ impl Ctx {
         t == MemberType::Action || t == MemberType::Function || t == MemberType::Native
     }
     /// 从指定对象中获取成员补全
-    fn get_members_from_object(&self, object_path: &str, prefix: &str, root_object: &ObjectNode) -> Option<Vec<ObjectMember>> {
+    fn get_members_from_object(&self, object_path: &str, prefix: &str, root_object: &Rc<RefCell<ObjectNode>>) -> Option<Vec<ObjectMember>> {
         let parts: Vec<&str> = object_path.split('/').filter(|s| !s.is_empty()).collect();
         if let Some(name) = parts.first() {
-            if root_object.members.contains_key(name) {
-                if let Some(results) = self.get_members_or_refiments(object_path, prefix, &root_object.name) {
+            if root_object.borrow().members.contains_key(name) {
+                if let Some(results) = self.get_members_or_refiments(object_path, prefix, root_object) {
                    return Some(results);
                 } else {
                     // try to find it in root_object
                     log::info!("finding it in root");
-                    if let Some(member) = root_object.members.get(name) && Self::is_any_func(member.member_type.clone()) {
+                    if let Some(member) = root_object.borrow().members.get(name) && Self::is_any_func(member.member_type.clone()) {
                        return self.get_refinements_from_member(member);
                     }
                 }
@@ -477,8 +462,9 @@ impl Ctx {
         None
     }
 
-    fn get_members_or_refiments(&self, object_path: &str, prefix: &str, scope_path: &str) -> Option<Vec<ObjectMember>> {
-        let (obj, is_found, word) = self.object_graph.resolve_object_path(object_path, scope_path);
+    fn get_members_or_refiments(&self, object_path: &str, prefix: &str, scope: &Rc<RefCell<ObjectNode>>) -> Option<Vec<ObjectMember>> {
+        log::info!("get_members_or: {} -- {}", object_path, scope.borrow().scope_path);
+        let (obj, is_found, word) = self.object_graph.resolve_object_path(object_path, scope);
         log::info!("is found?: {}", is_found);
         if is_found {
             let obj = obj.unwrap();
@@ -487,14 +473,14 @@ impl Ctx {
                 let results : Vec<ObjectMember> = if prefix.is_empty() {
                     obj.borrow().members.values().cloned().collect()
                 } else {
-                    obj.borrow().members.common_prefix_values(prefix).cloned().collect()
+                    obj.borrow().members.iter_prefix(prefix).map(|(_, v)| v.clone()).collect()
                 };
                 return Some(results);
             } else {
                 let results : Vec<ObjectMember> = if prefix.is_empty() {
                     obj_ref.members.values().cloned().collect()
                 } else {
-                    obj_ref.members.common_prefix_values(prefix).cloned().collect()
+                    obj_ref.members.iter_prefix(prefix).map(|(_, v)| v.clone()).collect()
                 };
                 return Some(results);
             }
@@ -504,13 +490,13 @@ impl Ctx {
                 let part = word.unwrap();
                 log::info!("finding function in object");
                 let obj_ref = obj.borrow();
-                if let Some(obj) = &obj_ref.include_obj {
-                    let obj_ref = obj.borrow();
-                    if let Some(member) = obj_ref.members.get(part.clone()) && Self::is_any_func(member.member_type.clone()) {
+                if let Some(inc_obj) = &obj_ref.include_obj {
+                    let inc_obj_ref = inc_obj.borrow();
+                    if let Some(member) = inc_obj_ref.members.get(&part) && Self::is_any_func(member.member_type.clone()) {
                         return self.get_refinements_from_member(member);
                     }
-                }{
-                    if let Some(member) = obj_ref.members.get(part) && Self::is_any_func(member.member_type.clone()) {
+                } else {
+                    if let Some(member) = obj_ref.members.get(&part) && Self::is_any_func(member.member_type.clone()) {
                         return self.get_refinements_from_member(member);
                     }
                 }
@@ -848,7 +834,10 @@ impl Ctx {
                     let (include_uri, _) = Self::red_file_to_uri(&include_path, base_dir);
                     scope_stack.push(member_name.clone());
                     let include_obj = if let Some(include_uri) = include_uri {
-                        self.object_graph.get(&format!("{}/{}", include_uri.as_str(), ANONYMOUS_OBJ)).cloned()
+                        log::info!("get include obj: {}", format!("{}/{}", include_uri.as_str(), ANONYMOUS_OBJ));
+                        let xx = self.object_graph.get(&format!("{}/{}", include_uri.as_str(), ANONYMOUS_OBJ));
+                        log::info!("get include obj2: {:?}", xx);
+                        xx.cloned()
                     } else {None};
                     self.object_graph.add_object(&member_name, scope_stack.join("/"),
                         ObjectNode {
@@ -938,7 +927,8 @@ impl Ctx {
                          for (key, value) in obj.borrow().members.iter() {
                              if value.member_type == MemberType::Object {
                                  scope_stack.push(key.clone());
-                                 let include_obj = self.object_graph.find_child_object(&include_uri.to_string(), &key).cloned();
+                                 let empty_scope = Rc::new(RefCell::new(ObjectNode::new()));
+                                 let include_obj = self.object_graph.find_child_object(&empty_scope, &key).cloned();
                                  self.object_graph.add_object(&key, scope_stack.join("/"),
                                      ObjectNode {
                                          name: member_name.clone(),
@@ -956,7 +946,24 @@ impl Ctx {
                  }
                  cursor.goto_next_sibling();
             } else if kind_id == kind_word && let Some(blk) = node.next_sibling() && blk.kind_id() == kind_block {
+                // case: object []
                 let name = get_node_text(source_code, &node).unwrap_or("");
+                if name == "context" || name == "object" {
+                    let mut obj = ObjectNode::new();
+                    obj.byte_range = (node.start_byte(), blk.end_byte());
+                    obj.file_path = uri.to_string();
+                    member_name = ANONYMOUS_OBJ.to_string();
+                    scope_stack.push(member_name.clone());
+                    let mut body_cursor = blk.walk();
+                    if body_cursor.goto_first_child() {
+                        self.parse_object_body(source_code, uri, &mut body_cursor, scope_stack, &mut obj);
+                    }
+                    log::info!("add anonymous obj {}", scope_stack.join("/"));
+                    self.object_graph.add_object(&member_name, scope_stack.join("/"), obj);
+                    member_type = MemberType::Object;
+                    scope_stack.pop();
+                    cursor.goto_next_sibling();
+                }
             }
 
             if !member_name.is_empty() {
@@ -1077,6 +1084,7 @@ impl Ctx {
         source_code: &str,
         path_node: &tree_sitter::Node,
         tokens: &mut Vec<(u32, u32, u32, u32, u32)>,
+        file_path: &str,
     ) {
         let mut cursor = path_node.walk();
         if !cursor.goto_first_child() {
@@ -1086,7 +1094,7 @@ impl Ctx {
         let path_start = cursor.node();
         let start_word = get_node_text(source_code, &path_start).unwrap_or("");
 
-        let (obj, is_func) = self.find_obj(start_word, path_start.start_byte());
+        let (obj, is_func, _name) = self.find_obj(start_word, path_start.start_byte(), file_path);
         let start_col = path_start.start_position().column as u32;
         let end_col = path_start.end_position().column as u32;
         let length = end_col - start_col - 1; // remove last "/"

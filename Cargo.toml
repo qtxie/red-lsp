@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 tree-sitter = "0.26.6"
-tree-sitter-red = { git = "https://github.com/qtxie/tree-sitter-red.git", rev = "fcebede77ccf24992eac731f9a6913fa5d0961a1" }
+tree-sitter-red = { git = "https://github.com/qtxie/tree-sitter-red.git", rev = "0625c39db2780453856fc513b1ef0c6009fd6f6c" }
 lsp-server = "0.7"
 lsp-types = "0.97"
 serde_json = "1"
