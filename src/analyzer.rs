@@ -5,7 +5,6 @@ use tree_sitter::{Tree, TreeCursor};
 use compact_str::CompactString;
 use fast_radix_trie::StringRadixMap;
 use std::fs;
-use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use url::Url;
 use std::collections::BTreeMap;
@@ -53,6 +52,10 @@ pub struct ObjectMember {
     pub member_type: MemberType,
     /// 如果是函数，存储其 spec 内容（参数和 refinements）
     pub spec_content: Option<String>,
+    /// 成员定义位置的字节范围 (start, end)
+    pub byte_range: Option<(usize, usize)>,
+    /// 成员定义所在的文件路径
+    pub file_path: Option<String>,
 }
 
 /// 对象节点，表示一个 context 对象
@@ -303,7 +306,9 @@ impl Ctx {
                             results.push(ObjectMember {
                                 name: CompactString::from(ref_name),
                                 member_type: MemberType::Value,
-                                spec_content: None
+                                spec_content: None,
+                                byte_range: Some((node.start_byte(), node.end_byte())),
+                                file_path: None
                             });
                         }
                     }
@@ -369,8 +374,8 @@ log::info!("find scopes: {:?}", scopes);
     }
 
     /// 查找对象或成员的定义位置
-    /// 返回：(对象节点，是否为函数，成员名称)
-    pub fn find_obj(&self, word: &str, start_byte: usize, file_path: &str) -> (Option<ObjectNode>, bool, Option<String>) {
+    /// 返回：(对象节点，是否为函数，成员信息)
+    pub fn find_obj(&self, word: &str, start_byte: usize, file_path: &str) -> (Option<ObjectNode>, bool, Option<ObjectMember>) {
         // 首先从 object_graph 查找
         // 首先找到当前光标所在的作用域
         let scopes = self.object_graph.find_scopes_at_position(start_byte, file_path);
@@ -379,7 +384,11 @@ log::info!("find scopes: {:?}", scopes);
         for scope in &scopes {
             let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, scope);
             if is_found {
-                return (obj.map(|v| v.borrow().clone()), false, member_name);
+                let obj_clone = obj.as_ref().map(|o| o.borrow().clone());
+                let member = member_name.and_then(|name| {
+                    obj.as_ref()?.borrow().members.get(&name).cloned()
+                });
+                return (obj_clone, false, member);
             }
         }
         // 从 document 的 root_object 查找
@@ -388,10 +397,14 @@ log::info!("find scopes: {:?}", scopes);
                 let root_obj = document.root_object.clone();
                 let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &root_obj);
                 if is_found {
-                    return (obj.map(|v| v.borrow().clone()), false, member_name);
+                    let obj_clone = obj.as_ref().map(|o| o.borrow().clone());
+                    let member = member_name.and_then(|name| {
+                        obj.as_ref()?.borrow().members.get(&name).cloned()
+                    });
+                    return (obj_clone, false, member);
                 } else {
                     if let Some(member) = document.root_object.borrow().members.get(word) && member.member_type == MemberType::Function {
-                       return (None, true, Some(member.name.to_string()));
+                       return (None, true, Some(member.clone()));
                     }
                 }
             }
@@ -401,10 +414,14 @@ log::info!("find scopes: {:?}", scopes);
         let builtin = self.builtin_ctx.clone();
         let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &builtin);
         if is_found {
-            return (obj.map(|v| v.borrow().clone()), false, member_name);
+            let obj_clone = obj.as_ref().map(|o| o.borrow().clone());
+            let member = member_name.and_then(|name| {
+                obj.as_ref()?.borrow().members.get(&name).cloned()
+            });
+            return (obj_clone, false, member);
         } else {
             if let Some(member) = self.builtin_ctx.borrow().members.get(word) && member.member_type == MemberType::Function {
-                return (None, true, Some(member.name.to_string()));
+                return (None, true, Some(member.clone()));
             }
         }
         (None, false, None)
@@ -968,9 +985,17 @@ log::info!("find scopes: {:?}", scopes);
 
             if !member_name.is_empty() {
                 let name = CompactString::from(&member_name);
+                let node_start = node.start_byte();
+                let node_end = node.end_byte();
                 scope.members.insert(
                     member_name,
-                    ObjectMember {name, member_type, spec_content}
+                    ObjectMember {
+                        name,
+                        member_type,
+                        spec_content,
+                        byte_range: Some((node_start, node_end)),
+                        file_path: Some(uri.to_string())
+                    }
                 );
             }
             if !cursor.goto_next_sibling() {

@@ -6,7 +6,9 @@ use lsp_types::*;
 use ropey::Rope;
 use tree_sitter::Parser;
 use rust_embed::Embed;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use url::Url;
 
 use crate::analyzer;
 
@@ -290,27 +292,43 @@ impl RedLanguageServer {
         let line_content = self.get_line_at_position(uri, position);
         if line_content.is_empty() {return None};
 
-        let cursor_col = position.character as usize;
+        let _cursor_col = position.character as usize;
         let byte_pos = self.get_byte_offset(uri, position);
 
-        // 提取要跳转的符号或路径
-        let symbol_path = if let Some((path, _member_prefix)) = self.extract_object_path(&line_content, cursor_col) {
-            // 对象路径，如 "a/b/c"
-            path
-        } else {
-            // 单个符号名
-            self.get_word_at_position(&line_content, cursor_col)
-        };
+        // 从语法树中提取光标位置的节点
+        let token = self.extract_path_from_tree(uri, byte_pos);
 
-        if symbol_path.is_empty() {
+        if token.is_empty() {
             return None;
         }
 
-        log::info!("goto definition for: {} at byte {}", symbol_path, byte_pos);
+        log::info!("goto definition for: '{}' at byte {}", token, byte_pos);
 
-        // 查找定义
+        // 检查是否是文件路径（以 % 开头）
+        if token.starts_with('%') {
+            return self.goto_file_path(&token, uri);
+        }
+
+        // 查找对象/符号定义
         let file_path = uri.to_string();
-        let (obj, is_func, member_name) = self.ctx.find_obj(&symbol_path, byte_pos, &file_path);
+        let (obj, is_func, member) = self.ctx.find_obj(&token, byte_pos, &file_path);
+
+        // 优先使用成员的位置信息
+        if let Some(member_info) = &member {
+            if let (Some(byte_range), Some(file_path)) = (&member_info.byte_range, &member_info.file_path) {
+                log::info!("found member: {} at {} {:?}", member_info.name, file_path, byte_range);
+                let range = self.byte_range_to_lsp_range(file_path, *byte_range)?;
+                let target_uri = if file_path.starts_with("builtin://") {
+                    uri.clone()
+                } else {
+                    Uri::from_str(file_path).unwrap_or_else(|_| uri.clone())
+                };
+                return Some(GotoDefinitionResponse::Scalar(Location {
+                    uri: target_uri,
+                    range,
+                }));
+            }
+        }
 
         if let Some(obj_node) = obj {
             // 找到对象定义
@@ -333,13 +351,182 @@ impl RedLanguageServer {
         }
 
         if is_func {
-            // 找到函数成员，需要查找该成员的定义位置
-            log::info!("found function member: {:?}", member_name);
-            // 对于函数成员，我们需要查找其所在对象的定义
-            // TODO: 如果成员有独立的定义位置信息，可以返回该位置
+            // 找到函数成员，但没有位置信息
+            log::info!("found function member without location: {:?}", member.as_ref().map(|m| m.name.as_str()));
         }
 
         None
+    }
+
+    /// 跳转到文件路径
+    fn goto_file_path(&self, file_path: &str, current_uri: &Uri) -> Option<GotoDefinitionResponse> {
+        // 移除 % 前缀和可能的引号
+        let path = file_path.trim_start_matches('%').trim_matches('"');
+
+        if path.is_empty() {
+            return None;
+        }
+
+        log::info!("goto file path: {}", path);
+
+        // 获取当前文件所在目录
+        let current_dir = Url::parse(current_uri.as_str())
+            .ok()
+            .and_then(|url| url.to_file_path().ok())
+            .and_then(|p| p.parent().map(|parent| parent.to_path_buf()))
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        // 解析 Red 语言路径
+        let target_path = Self::red_path_to_full_path(path, &current_dir);
+
+        log::info!("target path: {:?}", target_path);
+
+        // 检查文件是否存在
+        if !target_path.exists() {
+            log::warn!("file not found: {:?}", target_path);
+            return None;
+        }
+
+        // 转换为 URI
+        let target_uri = Url::from_file_path(&target_path).ok()?;
+        let uri_str = target_uri.as_str();
+
+        // 创建 LSP URI
+        let lsp_uri: Uri = Uri::from_str(&format!("\"{}\"", uri_str))
+            .or_else(|_| Uri::from_str(uri_str))
+            .unwrap_or_else(|_| current_uri.clone());
+
+        // 返回文件开头的位置
+        Some(GotoDefinitionResponse::Scalar(Location {
+            uri: lsp_uri,
+            range: Range {
+                start: Position { line: 0, character: 0 },
+                end: Position { line: 0, character: 0 },
+            },
+        }))
+    }
+
+    /// 将 Red 语言路径转换为完整路径
+    fn red_path_to_full_path(red_path: &str, current_dir: &Path) -> PathBuf {
+        // 移除可能的前导斜杠
+        let path_str = red_path.trim_start_matches('/');
+
+        // 检查是否是 Windows 驱动器字母路径
+        #[cfg(windows)]
+        {
+            if path_str.len() >= 1
+                && path_str.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+                && path_str.chars().nth(1) == Some('/')
+            {
+                // 驱动器字母：C/folder → C:\folder
+                let drive = path_str.chars().next().unwrap_or('C');
+                let rest = &path_str[2..];
+                let mut path = PathBuf::new();
+                path.push(format!("{}:", drive));
+                if !rest.is_empty() {
+                    path.push(rest.replace('/', "\\"));
+                }
+                return path;
+            } else {
+                // 相对路径，相对于当前目录
+                return current_dir.join(path_str.replace('/', "\\"));
+            }
+        }
+
+        #[cfg(not(windows))]
+        {
+            // Unix 路径
+            if red_path.starts_with('/') {
+                PathBuf::from(red_path)
+            } else {
+                // 相对路径，相对于当前目录
+                current_dir.join(path_str)
+            }
+        }
+    }
+
+    /// 从语法树中提取光标位置的节点文本
+    /// 根据节点类型（path, word, file）返回相应的内容
+    fn extract_path_from_tree(&self, uri: &Uri, byte_pos: usize) -> String {
+        let Some(document) = self.ctx.documents.get(uri) else {
+            return String::new();
+        };
+
+        let Some(tree) = &document.tree else {
+            return String::new();
+        };
+
+        let source_code = document.content.to_string();
+        let root = tree.root_node();
+
+        // 使用 descendant_for_byte_range 找到包含光标位置的节点
+        root.descendant_for_byte_range(byte_pos, byte_pos)
+            .and_then(|node| {
+                let kind = node.kind();
+                let kind_id = node.kind_id();
+
+                log::info!("node at {}: kind={}, kind_id={}", byte_pos, kind, kind_id);
+
+                // 获取节点文本
+                let text = Self::get_node_text(&source_code, &node)?;
+
+                // 根据节点类型返回
+                match kind {
+                    "file" => {
+                        // 文件路径，返回完整路径（包括 %）
+                        Some(text.to_string())
+                    }
+                    "word" | "path_start" | "get_word" => {
+                        if let Some(parent) = node.parent() && parent.kind() == "path" {
+                            self.extract_path_to_cursor(text, byte_pos - parent.start_byte())
+                        } else {
+                            Some(text.to_string())
+                        }
+                    }
+                    _ => {
+                        // 其他类型，尝试返回文本
+                        Some(String::new())
+                    }
+                }
+            })
+            .unwrap_or_default()
+    }
+
+    /// 获取节点文本
+    fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&'a str> {
+        let start_byte = node.start_byte();
+        let end_byte = node.end_byte();
+
+        if start_byte <= source_code.len() && end_byte <= source_code.len() && start_byte <= end_byte {
+            Some(&source_code[start_byte..end_byte])
+        } else {
+            None
+        }
+    }
+
+    /// 从路径中提取到光标位置的部分
+    fn extract_path_to_cursor(&self, path: &str, cursor_offset: usize) -> Option<String> {
+        // 将路径按 / 分割
+        let parts: Vec<&str> = path.split('/').collect();
+
+        let mut pos = 0;
+        let mut result_parts: Vec<&str> = Vec::new();
+
+        for part in parts {
+            let part_start = pos;
+            let part_end = pos + part.len();
+
+            // 检查光标是否在这个部分内
+            if cursor_offset >= part_start && cursor_offset <= part_end {
+                result_parts.push(part);
+                return Some(result_parts.join("/"));
+            }
+
+            result_parts.push(part);
+            pos = part_end + 1; // +1 for the '/'
+        }
+
+        Some(path.to_string())
     }
 
     /// 将字节范围转换为 LSP 位置范围
