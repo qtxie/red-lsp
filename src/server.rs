@@ -332,16 +332,17 @@ impl RedLanguageServer {
 
         if let Some(obj_node) = obj {
             // 找到对象定义
-            log::info!("found object: {} at {} {:?}", obj_node.name, obj_node.file_path, obj_node.byte_range);
+            let obj_ref = obj_node.borrow();
+            log::info!("found object: {} at {} {:?}", obj_ref.name, obj_ref.file_path, obj_ref.byte_range);
 
             // 将字节范围转换为 LSP 位置
-            let range = self.byte_range_to_lsp_range(&obj_node.file_path, obj_node.byte_range)?;
+            let range = self.byte_range_to_lsp_range(&obj_ref.file_path, obj_ref.byte_range)?;
 
-            let target_uri = if obj_node.file_path.starts_with("builtin://") {
+            let target_uri = if obj_ref.file_path.starts_with("builtin://") {
                 // 内置定义，尝试找到源文件
                 uri.clone()
             } else {
-                Uri::from_str(&obj_node.file_path).unwrap_or_else(|_| uri.clone())
+                Uri::from_str(&obj_ref.file_path).unwrap_or_else(|_| uri.clone())
             };
 
             return Some(GotoDefinitionResponse::Scalar(Location {
@@ -506,6 +507,8 @@ impl RedLanguageServer {
 
     /// 从路径中提取到光标位置的部分
     fn extract_path_to_cursor(&self, path: &str, cursor_offset: usize) -> Option<String> {
+        log::info!("extract_path_to_cursor: path='{}', cursor_offset={}", path, cursor_offset);
+        
         // 将路径按 / 分割
         let parts: Vec<&str> = path.split('/').collect();
 
@@ -516,16 +519,24 @@ impl RedLanguageServer {
             let part_start = pos;
             let part_end = pos + part.len();
 
+            log::info!("  checking part='{}', start={}, end={}, cursor_offset={}", part, part_start, part_end, cursor_offset);
+            
             // 检查光标是否在这个部分内
             if cursor_offset >= part_start && cursor_offset <= part_end {
+                // 光标在这个部分，返回到当前部分为止的路径（包括之前的所有部分）
                 result_parts.push(part);
-                return Some(result_parts.join("/"));
+                let result = result_parts.join("/");
+                log::info!("  found! returning: '{}'", result);
+                return Some(result);
             }
 
+            // 还没到光标所在部分，先保存这个部分
             result_parts.push(part);
             pos = part_end + 1; // +1 for the '/'
         }
 
+        // 光标在路径末尾，返回完整路径
+        log::info!("  cursor at end, returning: '{}'", path);
         Some(path.to_string())
     }
 

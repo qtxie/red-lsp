@@ -375,7 +375,7 @@ log::info!("find scopes: {:?}", scopes);
 
     /// 查找对象或成员的定义位置
     /// 返回：(对象节点，是否为函数，成员信息)
-    pub fn find_obj(&self, word: &str, start_byte: usize, file_path: &str) -> (Option<ObjectNode>, bool, Option<ObjectMember>) {
+    pub fn find_obj(&self, word: &str, start_byte: usize, file_path: &str) -> (Option<Rc<RefCell<ObjectNode>>>, bool, Option<ObjectMember>) {
         // 首先从 object_graph 查找
         // 首先找到当前光标所在的作用域
         let scopes = self.object_graph.find_scopes_at_position(start_byte, file_path);
@@ -384,11 +384,10 @@ log::info!("find scopes: {:?}", scopes);
         for scope in &scopes {
             let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, scope);
             if is_found {
-                let obj_clone = obj.as_ref().map(|o| o.borrow().clone());
                 let member = member_name.and_then(|name| {
                     obj.as_ref()?.borrow().members.get(&name).cloned()
                 });
-                return (obj_clone, false, member);
+                return (obj.clone(), false, member);
             }
         }
         // 从 document 的 root_object 查找
@@ -397,11 +396,10 @@ log::info!("find scopes: {:?}", scopes);
                 let root_obj = document.root_object.clone();
                 let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &root_obj);
                 if is_found {
-                    let obj_clone = obj.as_ref().map(|o| o.borrow().clone());
                     let member = member_name.and_then(|name| {
                         obj.as_ref()?.borrow().members.get(&name).cloned()
                     });
-                    return (obj_clone, false, member);
+                    return (obj.clone(), false, member);
                 } else {
                     if let Some(member) = document.root_object.borrow().members.get(word) && member.member_type == MemberType::Function {
                        return (None, true, Some(member.clone()));
@@ -414,11 +412,10 @@ log::info!("find scopes: {:?}", scopes);
         let builtin = self.builtin_ctx.clone();
         let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &builtin);
         if is_found {
-            let obj_clone = obj.as_ref().map(|o| o.borrow().clone());
             let member = member_name.and_then(|name| {
                 obj.as_ref()?.borrow().members.get(&name).cloned()
             });
-            return (obj_clone, false, member);
+            return (obj.clone(), false, member);
         } else {
             if let Some(member) = self.builtin_ctx.borrow().members.get(word) && member.member_type == MemberType::Function {
                 return (None, true, Some(member.clone()));
@@ -796,6 +793,7 @@ log::info!("find scopes: {:?}", scopes);
                 self.parse_object_body(source_code, file_uri, cursor , &mut scope_stack, &mut *obj_borrow);
             }
             obj_borrow.file_path = file_path.clone();
+            obj_borrow.scope_path = file_path.clone();
             obj_borrow.name = file_path;
         }
         obj
@@ -1153,7 +1151,7 @@ log::info!("find scopes: {:?}", scopes);
                 let mut check = true;
                 for (part_node, part) in path_parts.iter() {
                     let mut token_type = TokenType::RedVariable;
-                    if check && let Some(member) = ctx.members.get(part) {
+                    if check && let Some(member) = ctx.borrow().members.get(part) {
                         match member.member_type {
                             MemberType::Function => token_type = TokenType::RedFunction,
                             MemberType::Object => token_type = TokenType::RedVariable,
@@ -1170,8 +1168,8 @@ log::info!("find scopes: {:?}", scopes);
                     tokens.push((part_node.start_position().row as u32, start_col, length, token_type.clone() as u32, 0));
 
                     if token_type == TokenType::RedCtx {
-                        if let Some(obj) = self.object_graph.get(&format!("{}/{}", ctx.scope_path, part)) {
-                            ctx = obj.borrow().clone();
+                        if let Some(obj) = self.object_graph.get(&format!("{}/{}", ctx.borrow().scope_path, part)) {
+                            ctx = obj.clone();
                         } else {
                             check = false;
                         }
