@@ -45,6 +45,18 @@ struct RedLanguageServer {
     client_supports_delta: bool,
 }
 
+/// 补全类型
+enum CompletionType {
+    /// 文件路径补全（% 开头）
+    FilePath(String),
+    /// 对象成员补全（path/ 格式）
+    ObjectMember(String, String),
+    /// 普通符号补全
+    Symbol(String),
+    /// 无补全
+    None,
+}
+
 impl RedLanguageServer {
     fn new() -> Self {
         let mut parser = Parser::new();
@@ -311,7 +323,7 @@ impl RedLanguageServer {
 
         // 查找对象/符号定义
         let file_path = uri.to_string();
-        let (obj, is_func, member) = self.ctx.find_obj(&token, byte_pos, &file_path);
+        let (obj, member) = self.ctx.find_obj(&token, byte_pos, &file_path);
 
         // 优先使用成员的位置信息
         if let Some(member_info) = &member {
@@ -351,9 +363,9 @@ impl RedLanguageServer {
             }));
         }
 
-        if is_func {
-            // 找到函数成员，但没有位置信息
-            log::info!("found function member without location: {:?}", member.as_ref().map(|m| m.name.as_str()));
+        // 找到成员但没有位置信息
+        if let Some(member_info) = &member {
+            log::info!("found member without location: {:?}", member_info.name);
         }
 
         None
@@ -508,7 +520,7 @@ impl RedLanguageServer {
     /// 从路径中提取到光标位置的部分
     fn extract_path_to_cursor(&self, path: &str, cursor_offset: usize) -> Option<String> {
         log::info!("extract_path_to_cursor: path='{}', cursor_offset={}", path, cursor_offset);
-        
+
         // 将路径按 / 分割
         let parts: Vec<&str> = path.split('/').collect();
 
@@ -520,7 +532,7 @@ impl RedLanguageServer {
             let part_end = pos + part.len();
 
             log::info!("  checking part='{}', start={}, end={}, cursor_offset={}", part, part_start, part_end, cursor_offset);
-            
+
             // 检查光标是否在这个部分内
             if cursor_offset >= part_start && cursor_offset <= part_end {
                 // 光标在这个部分，返回到当前部分为止的路径（包括之前的所有部分）
@@ -585,36 +597,139 @@ impl RedLanguageServer {
         let position = params.text_document_position.position;
         self.ctx.current_uri = Some(uri.clone());
 
-        // 获取光标所在行的内容，判断是否是路径补全
-        let line_content = self.get_line_at_position(uri, position);
-        let cursor_col = position.character as usize;
+        let byte_pos = self.get_byte_offset(uri, position);
 
-        // 检查是否是 Red 语言文件路径补全（以 % 开头）
-        if let Some(path_prefix) = self.extract_path_prefix(&line_content, cursor_col) {
-            // 文件路径补全
-            let completions = self.ctx.get_path_completions(&path_prefix, uri);
-            let items = get_path_completion_items(&completions);
-            return Some(lsp_types::CompletionResponse::Array(items));
+        // 从语法树中提取光标位置的节点类型，确定补全类型
+        let completion_type = self.get_completion_type_from_tree(uri, byte_pos);
+
+        match completion_type {
+            CompletionType::FilePath(path_prefix) => {
+                // 文件路径补全
+                let completions = self.ctx.get_path_completions(&path_prefix, uri);
+                let items = get_path_completion_items(&completions);
+                Some(lsp_types::CompletionResponse::Array(items))
+            }
+            CompletionType::ObjectMember(object_path, member_prefix) => {
+                // 对象成员补全
+                let members = self.ctx.get_object_completions(&object_path, byte_pos, &member_prefix, uri);
+                let items = get_object_completion_items(&members);
+                Some(lsp_types::CompletionResponse::Array(items))
+            }
+            CompletionType::Symbol(prefix) => {
+                // 普通符号补全
+                if prefix.is_empty() {
+                    Some(lsp_types::CompletionResponse::Array(vec![]))
+                } else {
+                    let symbols = self.ctx.symbols.find_by_prefix(&prefix);
+                    let items = get_red_completions(&symbols);
+                    Some(lsp_types::CompletionResponse::Array(items))
+                }
+            }
+            CompletionType::None => {
+                Some(lsp_types::CompletionResponse::Array(vec![]))
+            }
+        }
+    }
+
+    /// 从语法树中获取光标位置的补全类型
+    fn get_completion_type_from_tree(&self, uri: &Uri, byte_pos: usize) -> CompletionType {
+        let Some(document) = self.ctx.documents.get(uri) else {
+            return CompletionType::None;
+        };
+
+        let Some(tree) = &document.tree else {
+            return CompletionType::None;
+        };
+
+        let source_code = document.content.to_string();
+        let root = tree.root_node();
+
+        // 找到包含光标位置的节点
+        if let Some(node) = root.descendant_for_byte_range(byte_pos-1, byte_pos-1) {
+            let kind = node.kind();
+            log::info!("completion at {}: kind={}", byte_pos, kind);
+
+            // 获取节点文本
+            if let Some(text) = Self::get_node_text(&source_code, &node) {
+                log::info!("completion text {}", text);
+                match kind {
+                    "file" => {
+                        // 文件路径补全
+                        return CompletionType::FilePath(text.to_string());
+                    }
+                    "word" | "path_start" | "get_word" => {
+                        if let Some(parent) = node.parent() && parent.kind() == "path" {
+                            let cursor_offset = byte_pos - node.start_byte();
+                            return self.get_object_path_completion(Self::get_node_text(&source_code, &parent).unwrap(), cursor_offset);
+                        } else {
+                            // 普通符号补全
+                            return CompletionType::Symbol(text.to_string());
+                        }
+                    }
+                    "/" => {
+                        log::info!("get_completion_callback");
+                        return self.get_completion_type_fallback(uri, byte_pos);
+                    }
+                    _ => {}
+                }
+            }
         }
 
-        // 检查是否是对象成员/函数 refinement 补全（包含 / 但不以 % 开头）
-        if let Some((object_path, member_prefix)) = self.extract_object_path(&line_content, cursor_col) {
-            // 对象成员补全 - 需要计算光标的字节位置
-            let byte_pos = self.get_byte_offset(uri, position);
-            log::info!("start path completion");
-            let members = self.ctx.get_object_completions(&object_path, byte_pos, &member_prefix, uri);
-            let items = get_object_completion_items(&members);
-            return Some(lsp_types::CompletionResponse::Array(items));
+        CompletionType::None
+    }
+
+    /// 获取对象路径补全类型
+    fn get_object_path_completion(&self, path: &str, cursor_offset: usize) -> CompletionType {
+        // 找到最后一个 / 的位置
+        if let Some(last_slash) = path.rfind('/') {
+            if cursor_offset > last_slash {
+                // 光标在最后一个 / 之后，补全成员
+                let object_path = path[..last_slash].to_string();
+                let member_prefix = path[last_slash + 1..].to_string();
+                return CompletionType::ObjectMember(object_path, member_prefix);
+            } else {
+                // 光标在最后一个 / 之前，继续解析前面的路径
+                return self.get_object_path_completion(&path[..last_slash], cursor_offset);
+            }
         }
 
-        // 普通符号补全
-        let prefix = self.get_word_at_position(&line_content, cursor_col);
-        if prefix.is_empty() {
-            return Some(lsp_types::CompletionResponse::Array(vec![]));
+        // 没有 /，补全对象路径
+        CompletionType::ObjectMember(String::new(), path.to_string())
+    }
+
+    /// 回退到基于字符串的方法
+    fn get_completion_type_fallback(&self, uri: &Uri, byte_pos: usize) -> CompletionType {
+        let Some(document) = self.ctx.documents.get(uri) else {
+            return CompletionType::None;
+        };
+
+        let source_code = document.content.to_string();
+
+        // 找到光标所在行的开始位置
+        let line_start = source_code[..byte_pos].rfind('\n').map(|i| i + 1).unwrap_or(0);
+        let before_cursor = &source_code[line_start..byte_pos];
+
+        let token_start = before_cursor
+            .char_indices()
+            .rfind(|(_, c)| c.is_whitespace() || matches!(c, '[' | ']' | '(' | ')' | '}'))
+            .map(|(idx, _)| idx + 1)
+            .unwrap_or(0);
+
+        let token = &before_cursor[token_start..];
+log::info!("fallback... {}", token);
+        if token.starts_with('%') {
+            return CompletionType::FilePath(token.to_string());
         }
-        let symbols = self.ctx.symbols.find_by_prefix(&prefix);
-        let items = get_red_completions(&symbols);
-        Some(lsp_types::CompletionResponse::Array(items))
+
+        if token.contains('/') {
+            if let Some(last_slash) = token.rfind('/') {
+                let object_path = token[..last_slash].to_string();
+                let member_prefix = token[last_slash + 1..].to_string();
+                return CompletionType::ObjectMember(object_path, member_prefix);
+            }
+        }
+
+        CompletionType::Symbol(token.to_string())
     }
 
     /// 获取指定行的内容
@@ -654,7 +769,7 @@ impl RedLanguageServer {
         // 查找最后一个空白字符，确定当前 token 的起始位置
         let token_start = before_cursor
             .char_indices()
-            .rfind(|(_, c)| c.is_whitespace())
+            .rfind(|(_, c)| !is_word_char(*c))
             .map(|(idx, _)| idx + 1)
             .unwrap_or(0);
 
@@ -678,10 +793,9 @@ impl RedLanguageServer {
         // 获取光标之前的内容
         let before_cursor = &line_content[..cursor_col];
 
-        // 查找最后一个空白字符，确定当前 token 的起始位置
         let token_start = before_cursor
             .char_indices()
-            .rfind(|(_, c)| c.is_whitespace())
+            .rfind(|(_, c)| !is_word_char(*c))
             .map(|(idx, _)| idx + 1)
             .unwrap_or(0);
 

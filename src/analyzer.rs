@@ -180,11 +180,11 @@ impl ObjectGraph {
     /// 解析对象路径并找到对应的对象
     /// path: "a" 或 "a/b" 等
     /// current_scope: 当前所在的作用域对象
-    pub fn resolve_object_path(&self, path: &str, current_scope: &Rc<RefCell<ObjectNode>>) -> (Option<Rc<RefCell<ObjectNode>>>, bool, Option<String>) {
+    pub fn resolve_object_path(&self, path: &str, current_scope: &Rc<RefCell<ObjectNode>>) -> (Rc<RefCell<ObjectNode>>, bool, Option<String>) {
         // 将路径分割为部分
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         if parts.is_empty() {
-            return (None, false, None);
+            return (current_scope.clone(), false, None);
         }
 
         // 从当前作用域开始查找
@@ -199,16 +199,16 @@ impl ObjectGraph {
                 log::info!("resolve_object_path find: {} - {}", part, i);
                 if i == parts.len() - 1 {
                     // 最后一个部分，返回对象
-                    return (Some(obj.clone()), true, None);
+                    return (obj.clone(), true, None);
                 }
                 current_obj = obj.clone();
             } else {
                 // part might be a function
-                return (Some(current_obj), false, Some(part.to_string()));
+                return (current_obj, false, Some(part.to_string()));
             }
         }
 
-        (None, false, None)
+        (current_obj, false, None)
     }
 
     /// 在指定作用域下查找子对象
@@ -374,8 +374,8 @@ log::info!("find scopes: {:?}", scopes);
     }
 
     /// 查找对象或成员的定义位置
-    /// 返回：(对象节点，是否为函数，成员信息)
-    pub fn find_obj(&self, word: &str, start_byte: usize, file_path: &str) -> (Option<Rc<RefCell<ObjectNode>>>, bool, Option<ObjectMember>) {
+    /// 返回：(对象节点，成员信息)
+    pub fn find_obj(&self, word: &str, start_byte: usize, file_path: &str) -> (Option<Rc<RefCell<ObjectNode>>>, Option<ObjectMember>) {
         // 首先从 object_graph 查找
         // 首先找到当前光标所在的作用域
         let scopes = self.object_graph.find_scopes_at_position(start_byte, file_path);
@@ -385,9 +385,13 @@ log::info!("find scopes: {:?}", scopes);
             let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, scope);
             if is_found {
                 let member = member_name.and_then(|name| {
-                    obj.as_ref()?.borrow().members.get(&name).cloned()
+                    obj.as_ref().borrow().members.get(&name).cloned()
                 });
-                return (obj.clone(), false, member);
+                return (Some(obj.clone()), member);
+            } else {
+                if let Some(member) = obj.borrow().members.get(word) {
+                   return (None, Some(member.clone()));
+                }
             }
         }
         // 从 document 的 root_object 查找
@@ -397,12 +401,12 @@ log::info!("find scopes: {:?}", scopes);
                 let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &root_obj);
                 if is_found {
                     let member = member_name.and_then(|name| {
-                        obj.as_ref()?.borrow().members.get(&name).cloned()
+                        obj.as_ref().borrow().members.get(&name).cloned()
                     });
-                    return (obj.clone(), false, member);
+                    return (Some(obj.clone()), member);
                 } else {
-                    if let Some(member) = document.root_object.borrow().members.get(word) && member.member_type == MemberType::Function {
-                       return (None, true, Some(member.clone()));
+                    if let Some(member) = document.root_object.borrow().members.get(word) {
+                       return (None, Some(member.clone()));
                     }
                 }
             }
@@ -413,15 +417,15 @@ log::info!("find scopes: {:?}", scopes);
         let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &builtin);
         if is_found {
             let member = member_name.and_then(|name| {
-                obj.as_ref()?.borrow().members.get(&name).cloned()
+                obj.as_ref().borrow().members.get(&name).cloned()
             });
-            return (obj.clone(), false, member);
+            return (Some(obj.clone()), member);
         } else {
-            if let Some(member) = self.builtin_ctx.borrow().members.get(word) && member.member_type == MemberType::Function {
-                return (None, true, Some(member.clone()));
+            if let Some(member) = self.builtin_ctx.borrow().members.get(word) {
+                return (None, Some(member.clone()));
             }
         }
-        (None, false, None)
+        (None, None)
     }
 
     /// 获取对象成员补全
@@ -481,7 +485,6 @@ log::info!("find scopes: {:?}", scopes);
         let (obj, is_found, word) = self.object_graph.resolve_object_path(object_path, scope);
         log::info!("is found?: {}", is_found);
         if is_found {
-            let obj = obj.unwrap();
             let obj_ref = obj.borrow();
             if let Some(obj) = &obj_ref.include_obj {
                 let results : Vec<ObjectMember> = if prefix.is_empty() {
@@ -500,8 +503,7 @@ log::info!("find scopes: {:?}", scopes);
             }
         } else {
             // obj is the last object found
-            if let Some(obj) = obj {
-                let part = word.unwrap();
+            if let Some(part) = word {
                 log::info!("finding function in object");
                 let obj_ref = obj.borrow();
                 if let Some(inc_obj) = &obj_ref.include_obj {
@@ -1117,66 +1119,67 @@ log::info!("find scopes: {:?}", scopes);
         let path_start = cursor.node();
         let start_word = get_node_text(source_code, &path_start).unwrap_or("");
 
-        let (obj, is_func, _name) = self.find_obj(start_word, path_start.start_byte(), file_path);
+        let (obj, member) = self.find_obj(start_word, path_start.start_byte(), file_path);
         let start_col = path_start.start_position().column as u32;
         let end_col = path_start.end_position().column as u32;
         let length = end_col - start_col - 1; // remove last "/"
-        if is_func {
-            tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedFunction as u32, 0));
-            return;
-        } else {
-            // Collect all word nodes in the path
-            let kind_word = self.get_kind_id("word");
-            let mut path_parts: Vec<(tree_sitter::Node, String)> = Vec::new();
-
-            loop {
-                let node = cursor.node();
-                if node.kind_id() == kind_word {
-                    if let Some(text) = get_node_text(source_code, &node) {
-                        path_parts.push((node, text.to_string()));
-                    }
-                }
-                if !cursor.goto_next_sibling() {
-                    break;
-                }
-            }
-
-            if path_parts.is_empty() {
+        if let Some(m) = &member {
+            if m.member_type == MemberType::Function {
+                tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedFunction as u32, 0));
                 return;
             }
+        }
+        // Collect all word nodes in the path
+        let kind_word = self.get_kind_id("word");
+        let mut path_parts: Vec<(tree_sitter::Node, String)> = Vec::new();
 
-            if let Some(obj) = obj {
-                let mut ctx = obj;
-                //tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedCtx as u32, 0));
-                let mut check = true;
-                for (part_node, part) in path_parts.iter() {
-                    let mut token_type = TokenType::RedVariable;
-                    if check && let Some(member) = ctx.borrow().members.get(part) {
-                        match member.member_type {
-                            MemberType::Function => token_type = TokenType::RedFunction,
-                            MemberType::Object => token_type = TokenType::RedVariable,
-                            MemberType::Native => token_type = TokenType::RedKeyword,
-                            MemberType::Action => token_type = TokenType::RedKeyword,
-                            MemberType::Routine => token_type = TokenType::RedKeyword,
-                            MemberType::Value => token_type = TokenType::RedVariable,
-                        }
+        loop {
+            let node = cursor.node();
+            if node.kind_id() == kind_word {
+                if let Some(text) = get_node_text(source_code, &node) {
+                    path_parts.push((node, text.to_string()));
+                }
+            }
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+
+        if path_parts.is_empty() {
+            return;
+        }
+
+        if let Some(obj) = obj {
+            let mut ctx = obj;
+            //tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedCtx as u32, 0));
+            let mut check = true;
+            for (part_node, part) in path_parts.iter() {
+                let mut token_type = TokenType::RedVariable;
+                if check && let Some(member) = ctx.borrow().members.get(part) {
+                    match member.member_type {
+                        MemberType::Function => token_type = TokenType::RedFunction,
+                        MemberType::Object => token_type = TokenType::RedVariable,
+                        MemberType::Native => token_type = TokenType::RedKeyword,
+                        MemberType::Action => token_type = TokenType::RedKeyword,
+                        MemberType::Routine => token_type = TokenType::RedKeyword,
+                        MemberType::Value => token_type = TokenType::RedVariable,
                     }
+                }
 
-                    let start_col = part_node.start_position().column as u32;
-                    let end_col = part_node.end_position().column as u32;
-                    let length = end_col - start_col;
-                    tokens.push((part_node.start_position().row as u32, start_col, length, token_type.clone() as u32, 0));
+                let start_col = part_node.start_position().column as u32;
+                let end_col = part_node.end_position().column as u32;
+                let length = end_col - start_col;
+                tokens.push((part_node.start_position().row as u32, start_col, length, token_type.clone() as u32, 0));
 
-                    if token_type == TokenType::RedCtx {
-                        if let Some(obj) = self.object_graph.get(&format!("{}/{}", ctx.borrow().scope_path, part)) {
-                            ctx = obj.clone();
-                        } else {
-                            check = false;
-                        }
-                    }
-                    if token_type == TokenType::RedFunction {
+                if token_type == TokenType::RedCtx {
+                    if let Some(obj) = self.object_graph.get(&format!("{}/{}", ctx.borrow().scope_path, part)) {
+                        ctx = obj.clone();
+                    } else {
                         check = false;
                     }
+                }
+                if token_type == TokenType::RedFunction {
+                    check = false;
                 }
             }
         }
