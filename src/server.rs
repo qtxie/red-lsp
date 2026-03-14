@@ -146,6 +146,9 @@ impl RedLanguageServer {
                     TextDocumentSyncOptions {
                         open_close: Some(true),
                         change: Some(TextDocumentSyncKind::INCREMENTAL),
+                        save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
+                            include_text: Some(false),
+                        })),
                         ..Default::default()
                     },
                 )),
@@ -659,7 +662,7 @@ impl RedLanguageServer {
                     }
                     "word" | "path_start" | "get_word" => {
                         if let Some(parent) = node.parent() && parent.kind() == "path" {
-                            let cursor_offset = byte_pos - node.start_byte();
+                            let cursor_offset = byte_pos - parent.start_byte();
                             return self.get_object_path_completion(Self::get_node_text(&source_code, &parent).unwrap(), cursor_offset);
                         } else {
                             // Regular symbol completion
@@ -835,6 +838,25 @@ log::info!("fallback... {}", token);
 
         self.ctx.documents.remove(uri);
         self.semantic_tokens_cache.remove(uri);
+    }
+
+    fn handle_text_document_did_save(&mut self, params: DidSaveTextDocumentParams) {
+        let uri = params.text_document.uri.clone();
+        self.ctx.current_uri = Some(uri.clone());
+
+        // Re-run collect_identifiers to update symbols
+        if let Some(document) = self.ctx.documents.get(&uri) {
+            let content = document.content.to_string();
+            if let Some(tree) = &document.tree {
+                // Re-collect identifiers and update object graph
+                // First remove old objects from this file
+                let file_path = uri.to_string();
+                self.ctx.object_graph.remove_objects_by_file(&file_path);
+
+                // Then re-collect
+                self.ctx.collect_identifiers(&content, &Some(tree.clone()), &uri);
+            }
+        }
     }
 
     fn handle_semantic_tokens_full(
@@ -1284,6 +1306,10 @@ fn handle_notification(
         "textDocument/didClose" => {
             let params: DidCloseTextDocumentParams = serde_json::from_value(notification.params)?;
             server.handle_text_document_did_close(params);
+        }
+        "textDocument/didSave" => {
+            let params: DidSaveTextDocumentParams = serde_json::from_value(notification.params)?;
+            server.handle_text_document_did_save(params);
         }
         _ => {}
     }

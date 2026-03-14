@@ -4,7 +4,7 @@ use ropey::Rope;
 use tree_sitter::{Tree, TreeCursor};
 use compact_str::CompactString;
 use fast_radix_trie::StringRadixMap;
-use std::fs;
+use std::{fs, mem};
 use std::path::{Path, PathBuf};
 use url::Url;
 use std::collections::BTreeMap;
@@ -193,10 +193,12 @@ impl ObjectGraph {
         for (i, part) in parts.iter().enumerate() {
             // Find an object named part under the current path
 
-            let found = self.find_child_object(current_scope, part);
+            let ctx = current_obj.borrow().include_obj.clone().unwrap_or_else(|| current_obj.clone());
+            let found = self.find_child_object(&ctx, part);
 
             if let Some(obj) = found {
                 log::info!("resolve_object_path find: {} - {}", part, i);
+                let obj = obj.borrow().include_obj.clone().unwrap_or_else(|| obj.clone());
                 if i == parts.len() - 1 {
                     // Last part, return the object
                     return (obj.clone(), true, None);
@@ -213,7 +215,6 @@ impl ObjectGraph {
 
     /// Find child object under the specified scope
     fn find_child_object(&self, parent_scope: &Rc<RefCell<ObjectNode>>, child_name: &str) -> Option<&Rc<RefCell<ObjectNode>>> {
-        // Get all objects with the same name
         let scope_path = format!("{}/{}", parent_scope.borrow().scope_path, child_name);
         self.objects.get(&scope_path)
     }
@@ -373,6 +374,22 @@ log::info!("find scopes: {:?}", scopes);
         Vec::new()
     }
 
+    /// Helper function to process resolve_object_path result
+    fn process_resolve_result(obj: &Rc<RefCell<ObjectNode>>, is_found: bool, member_name: Option<String>, word: &str) -> (Option<Rc<RefCell<ObjectNode>>>, Option<ObjectMember>) {
+        let obj = obj.borrow().include_obj.clone().unwrap_or_else(|| obj.clone());
+        if is_found {
+            let member = member_name.and_then(|name| {
+                obj.as_ref().borrow().members.get(&name).cloned()
+            });
+            return (Some(obj.clone()), member);
+        } else {
+            if let Some(member) = obj.borrow().members.get(word) {
+                return (None, Some(member.clone()));
+            }
+        }
+        (None, None)
+    }
+
     /// Find the definition position of an object member
     /// Returns: (object node, member info)
     pub fn find_obj(&self, word: &str, start_byte: usize, file_path: &str) -> (Option<Rc<RefCell<ObjectNode>>>, Option<ObjectMember>) {
@@ -383,6 +400,7 @@ log::info!("find scopes: {:?}", scopes);
         // Try to resolve object path from the current scope
         for scope in &scopes {
             let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, scope);
+            let obj = obj.borrow().include_obj.clone().unwrap_or_else(|| obj.clone());
             if is_found {
                 let member = member_name.and_then(|name| {
                     obj.as_ref().borrow().members.get(&name).cloned()
@@ -399,33 +417,14 @@ log::info!("find scopes: {:?}", scopes);
             if let Some(document) = self.documents.get(uri) {
                 let root_obj = document.root_object.clone();
                 let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &root_obj);
-                if is_found {
-                    let member = member_name.and_then(|name| {
-                        obj.as_ref().borrow().members.get(&name).cloned()
-                    });
-                    return (Some(obj.clone()), member);
-                } else {
-                    if let Some(member) = document.root_object.borrow().members.get(word) {
-                       return (None, Some(member.clone()));
-                    }
-                }
+                return Self::process_resolve_result(&obj, is_found, member_name, word);
             }
         }
 
         // Search from builtin_ctx
         let builtin = self.builtin_ctx.clone();
         let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &builtin);
-        if is_found {
-            let member = member_name.and_then(|name| {
-                obj.as_ref().borrow().members.get(&name).cloned()
-            });
-            return (Some(obj.clone()), member);
-        } else {
-            if let Some(member) = self.builtin_ctx.borrow().members.get(word) {
-                return (None, Some(member.clone()));
-            }
-        }
-        (None, None)
+        Self::process_resolve_result(&obj, is_found, member_name, word)
     }
 
     /// Get object member completions
@@ -504,7 +503,7 @@ log::info!("find scopes: {:?}", scopes);
         } else {
             // obj is the last object found
             if let Some(part) = word {
-                log::info!("finding function in object");
+                log::info!("finding function in object: {}", obj.borrow().name);
                 let obj_ref = obj.borrow();
                 if let Some(inc_obj) = &obj_ref.include_obj {
                     let inc_obj_ref = inc_obj.borrow();
@@ -1120,12 +1119,22 @@ log::info!("find scopes: {:?}", scopes);
 
         let path_start = cursor.node();
         let start_word = get_node_text(source_code, &path_start).unwrap_or("");
-
+log::info!("highlight Path node: start_word {}", start_word);
         let (obj, member) = self.find_obj(start_word, path_start.start_byte(), file_path);
+        if let Some(xx) = &obj {
+        log::info!("highlight Path node: obj {}", xx.borrow().name);
+        }else {
+            if let Some(yy) = &member {
+                log::info!("highlight path member: {}", yy.name);
+            } else {
+                log::info!("highlight path none")
+            }
+        }
         let start_col = path_start.start_position().column as u32;
         let end_col = path_start.end_position().column as u32;
         let length = end_col - start_col - 1; // remove last "/"
         if let Some(m) = &member {
+            log::info!("highlight path member2: {:?}", m);
             if m.member_type == MemberType::Function {
                 tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedFunction as u32, 0));
                 return;
@@ -1137,6 +1146,7 @@ log::info!("find scopes: {:?}", scopes);
 
         loop {
             let node = cursor.node();
+            log::info!("node kind: {}", node.kind());
             if node.kind_id() == kind_word {
                 if let Some(text) = get_node_text(source_code, &node) {
                     path_parts.push((node, text.to_string()));
@@ -1148,6 +1158,7 @@ log::info!("find scopes: {:?}", scopes);
         }
 
         if path_parts.is_empty() {
+            log::info!("empty path_parts!!!!!!!!!!!");
             return;
         }
 
@@ -1158,10 +1169,12 @@ log::info!("find scopes: {:?}", scopes);
             let mut check = true;
             for (part_node, part) in path_parts.iter() {
                 let mut token_type = TokenType::RedVariable;
+                log::info!("highlight path part: {}", part);
                 if check && let Some(member) = ctx.borrow().members.get(part) {
+                    log::info!("highlight path member3: {:?}", member);
                     match member.member_type {
                         MemberType::Function => token_type = TokenType::RedFunction,
-                        MemberType::Object => token_type = TokenType::RedVariable,
+                        MemberType::Object => token_type = TokenType::RedCtx,
                         MemberType::Native => token_type = TokenType::RedKeyword,
                         MemberType::Action => token_type = TokenType::RedKeyword,
                         MemberType::Routine => token_type = TokenType::RedKeyword,
@@ -1172,18 +1185,20 @@ log::info!("find scopes: {:?}", scopes);
                 let start_col = part_node.start_position().column as u32;
                 let end_col = part_node.end_position().column as u32;
                 let length = end_col - start_col;
-                tokens.push((part_node.start_position().row as u32, start_col, length, token_type.clone() as u32, 0));
 
                 if token_type == TokenType::RedCtx {
+                    log::info!("highlight check: {}", format!("{}/{}", ctx.borrow().scope_path, part));
                     if let Some(obj) = self.object_graph.get(&format!("{}/{}", ctx.borrow().scope_path, part)) {
-                        ctx = obj.clone();
+                        ctx = obj.borrow().include_obj.clone().unwrap_or_else(|| obj.clone());
                     } else {
                         check = false;
                     }
+                    token_type = TokenType::RedVariable;
                 }
                 if token_type == TokenType::RedFunction {
                     check = false;
                 }
+                tokens.push((part_node.start_position().row as u32, start_col, length, token_type.clone() as u32, 0));
             }
         }
     }
