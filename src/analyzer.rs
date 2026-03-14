@@ -27,44 +27,44 @@ pub struct Document {
     pub root_object: Rc<RefCell<ObjectNode>>,
 }
 
-/// 路径补全项
+/// Path completion item
 #[derive(Debug, Clone)]
 pub struct PathCompletionItem {
     pub label: String,
     pub is_dir: bool,
 }
 
-/// 对象成员类型
+/// Object member type
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemberType {
-    Value,      // 普通值（数字、字符串等）
-    Function,   // 函数
-    Object,     // 嵌套对象（context）
+    Value,      // Regular value (numbers, strings, etc.)
+    Function,   // Function
+    Object,     // Nested object (context)
     Native,
     Action,
     Routine,
 }
 
-/// 对象成员 - 使用 CompactString 存储名称
+/// Object member - uses CompactString for name storage
 #[derive(Debug, Clone)]
 pub struct ObjectMember {
     pub name: CompactString,
     pub member_type: MemberType,
-    /// 如果是函数，存储其 spec 内容（参数和 refinements）
+    /// If function, stores its spec content (parameters and refinements)
     pub spec_content: Option<String>,
-    /// 成员定义位置的字节范围 (start, end)
+    /// Byte range of member definition (start, end)
     pub byte_range: Option<(usize, usize)>,
-    /// 成员定义所在的文件路径
+    /// File path where member is defined
     pub file_path: Option<String>,
 }
 
-/// 对象节点，表示一个 context 对象
+/// Object node, represents a context object
 #[derive(Debug, Default, Clone)]
 pub struct ObjectNode {
-    pub name: String,                    // 对象名称（如 "a"）
-    pub scope_path: String,              // 完整作用域路径（如 "a/b/a"）
+    pub name: String,                    // Object name (e.g., "a")
+    pub scope_path: String,              // Full scope path (e.g., "a/b/a")
     pub members: StringRadixMap<ObjectMember>,
-    pub byte_range: (usize, usize),      // 对象在源代码中的字节范围
+    pub byte_range: (usize, usize),      // Byte range of object in source code
     pub file_path: String,
     pub include_obj: Option<Rc<RefCell<ObjectNode>>>    // link to another object
 }
@@ -80,18 +80,18 @@ impl ObjectNode {
     }
 }
 
-/// 对象图，存储所有定义的对象及其成员
+/// Object graph, stores all defined objects and their members
 #[derive(Debug)]
 pub struct ObjectGraph {
-    /// 作用域路径 -> 对象节点
+    /// Scope path -> Object node
     pub objects: HashMap<String, Rc<RefCell<ObjectNode>>>,
-    /// 对象名称 -> 该名称的所有对象作用域路径 (使用 HashSet 加速移除)
+    /// Object name -> All scope paths for that name (uses HashSet for fast removal)
     pub name_to_scopes: HashMap<String, HashSet<String>>,
-    /// 文件路径 -> 该文件的 range_map (start_byte -> scope_path)
+    /// File path -> range_map for that file (start_byte -> scope_path)
     file_range_maps: HashMap<String, BTreeMap<usize, String>>,
-    /// 文件路径 -> 该文件中的所有对象作用域路径，用于快速移除
+    /// File path -> All scope paths in that file, for fast removal
     file_to_scopes: HashMap<String, Vec<String>>,
-    /// 作用域路径 -> 对象名称，用于快速从 name_to_scopes 中移除
+    /// Scope path -> Object name, for fast removal from name_to_scopes
     scope_to_name: HashMap<String, String>,
 }
 
@@ -110,37 +110,37 @@ impl ObjectGraph {
         self.objects.get(path)
     }
 
-    /// 添加对象
+    /// Add object
     pub fn add_object(&mut self, name: &String, scope_path: String, obj: ObjectNode) {
         let mut obj = obj;
         obj.scope_path = scope_path.clone();
         obj.name = name.clone();
         let file_path = obj.file_path.clone();
 
-        // 记录名称到作用域的映射 (使用 HashSet)
+        // Record name to scope mapping (using HashSet)
         self.name_to_scopes.entry(name.clone()).or_insert_with(HashSet::new).insert(scope_path.clone());
-        // 同时插入到该文件的 range_map 中，用于快速查找
+        // Also insert into the file's range_map for fast lookup
         self.file_range_maps
             .entry(file_path.clone())
             .or_insert_with(BTreeMap::new)
             .insert(obj.byte_range.0, scope_path.clone());
-        // 记录文件到作用域的映射，用于快速移除
+        // Record file to scope mapping for fast removal
         self.file_to_scopes.entry(file_path).or_insert_with(Vec::new).push(scope_path.clone());
-        // 记录作用域到名称的映射，用于快速从 name_to_scopes 中移除
+        // Record scope to name mapping for fast removal from name_to_scopes
         self.scope_to_name.insert(scope_path.clone(), name.clone());
         self.objects.insert(scope_path, Rc::new(RefCell::new(obj)));
     }
 
-    /// 根据字节位置查找当前所在的作用域（从内到外）
+    /// Find current scope at byte position (from inner to outer)
     pub fn find_scopes_at_position(&self, byte_pos: usize, file_path: &str) -> Vec<&Rc<RefCell<ObjectNode>>> {
-        // 使用对应文件的 range_map 快速查找
+        // Use the file's range_map for fast lookup
         let Some(range_map) = self.file_range_maps.get(file_path) else {
             return Vec::new();
         };
 
-        // 找到所有 start_byte <= byte_pos 的作用域
-        // 然后过滤出 end_byte >= byte_pos 的作用域
-        // range(..=byte_pos).rev() 从后往前遍历，已经是内层作用域在前，无需再排序
+        // Find all scopes with start_byte <= byte_pos
+        // Then filter out those with end_byte >= byte_pos
+        // range(..=byte_pos).rev() iterates from back to front, inner scopes first, no need to sort
         range_map
             .range(..=byte_pos)
             .rev()
@@ -150,22 +150,22 @@ impl ObjectGraph {
             .collect()
     }
 
-    /// 移除文件相关的所有对象 - O(k) 时间复杂度，k 为该文件的对象数量
+    /// Remove all objects related to a file - O(k) time complexity, where k is the number of objects in that file
     pub fn remove_objects_by_file(&mut self, file_path: &str) {
-        // 直接从 file_to_scopes 获取该文件的所有作用域
+        // Directly get all scopes for this file from file_to_scopes
         let scopes_to_remove = match self.file_to_scopes.remove(file_path) {
             Some(scopes) => scopes,
-            None => return,  // 文件不存在，直接返回
+            None => return,  // File does not exist, return directly
         };
 
-        // 移除对象并从 name_to_scopes 中移除
+        // Remove objects and remove from name_to_scopes
         for scope_path in &scopes_to_remove {
             self.objects.remove(scope_path);
-            // 通过 scope_to_name 直接找到对应的名称，然后从 name_to_scopes 中移除
+            // Directly find the corresponding name through scope_to_name, then remove from name_to_scopes
             if let Some(name) = self.scope_to_name.remove(scope_path) {
                 if let Some(scopes) = self.name_to_scopes.get_mut(&name) {
                     scopes.remove(scope_path);
-                    // 如果该名称下没有作用域了，删除该条目
+                    // If there are no more scopes under this name, delete the entry
                     if scopes.is_empty() {
                         self.name_to_scopes.remove(&name);
                     }
@@ -173,32 +173,32 @@ impl ObjectGraph {
             }
         }
 
-        // 移除该文件的 range_map
+        // Remove the range_map for this file
         self.file_range_maps.remove(file_path);
     }
 
-    /// 解析对象路径并找到对应的对象
-    /// path: "a" 或 "a/b" 等
-    /// current_scope: 当前所在的作用域对象
+    /// Parse object path and find the corresponding object
+    /// path: "a" or "a/b", etc.
+    /// current_scope: The current scope object
     pub fn resolve_object_path(&self, path: &str, current_scope: &Rc<RefCell<ObjectNode>>) -> (Rc<RefCell<ObjectNode>>, bool, Option<String>) {
-        // 将路径分割为部分
+        // Split the path into parts
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         if parts.is_empty() {
             return (current_scope.clone(), false, None);
         }
 
-        // 从当前作用域开始查找
+        // Start searching from the current scope
         let mut current_obj = current_scope.clone();
 
         for (i, part) in parts.iter().enumerate() {
-            // 查找在当前路径下名为 part 的对象
+            // Find an object named part under the current path
 
             let found = self.find_child_object(current_scope, part);
 
             if let Some(obj) = found {
                 log::info!("resolve_object_path find: {} - {}", part, i);
                 if i == parts.len() - 1 {
-                    // 最后一个部分，返回对象
+                    // Last part, return the object
                     return (obj.clone(), true, None);
                 }
                 current_obj = obj.clone();
@@ -211,9 +211,9 @@ impl ObjectGraph {
         (current_obj, false, None)
     }
 
-    /// 在指定作用域下查找子对象
+    /// Find child object under the specified scope
     fn find_child_object(&self, parent_scope: &Rc<RefCell<ObjectNode>>, child_name: &str) -> Option<&Rc<RefCell<ObjectNode>>> {
-        // 获取所有同名对象
+        // Get all objects with the same name
         let scope_path = format!("{}/{}", parent_scope.borrow().scope_path, child_name);
         self.objects.get(&scope_path)
     }
@@ -225,8 +225,8 @@ pub struct Ctx {
     pub symbols: Symbols,
     pub functions: HashSet<CompactString>,
     pub include_cache: HashMap<Uri, Rc<RefCell<ObjectNode>>>,
-    pub object_graph: ObjectGraph,  // 对象图
-    /// 节点类型 ID 缓存，避免重复字符串比较
+    pub object_graph: ObjectGraph,  // object graph
+    /// Node type ID cache, avoid repeated string comparisons
     pub node_kind_ids: HashMap<&'static str, u16>,
     pub builtin_ctx: Rc<RefCell<ObjectNode>>,
     pub current_uri: Option<Uri>
@@ -238,7 +238,7 @@ impl Ctx {
         let lang = tree_sitter_red::LANGUAGE;
         parser.set_language(&lang.into()).expect("Failed to set language");
 
-        // 预获取所有节点类型的 kind_id
+        // Pre-fetch all node type kind_ids
         let mut node_kind_ids = HashMap::new();
         let lang: tree_sitter::Language = lang.into();
         for kind_name in [
@@ -260,13 +260,13 @@ impl Ctx {
         }
     }
 
-    /// 快速获取节点类型 ID
+    /// Quickly get node type ID
     #[inline]
     fn get_kind_id(&self, kind_name: &str) -> u16 {
         *self.node_kind_ids.get(kind_name).unwrap_or(&0)
     }
 
-    /// 解析单行文本并提取符号
+    /// Parse single line text and extract symbols
     pub fn parse_line_and_insert_symbols(&mut self, line_text: &str) {
         let tree = self.parser.parse(line_text, None);
         if let Some(tree) = tree {
@@ -276,7 +276,7 @@ impl Ctx {
     }
 
 
-    /// 从定义位置获取 refinements
+    /// Get refinements from definition position
     fn get_refinements_from_member(&self, def: &ObjectMember) -> Option<Vec<ObjectMember>> {
         log::info!("member spec: {:?}", def.spec_content);
         if let Some(spec) = &def.spec_content {
@@ -291,7 +291,7 @@ impl Ctx {
         None
     }
 
-    /// 从 spec 块中提取 refinements
+    /// Extract refinements from spec block
     fn extract_refinements_from_block(&self, source_code: &str, block_node: tree_sitter::Node) -> Option<Vec<ObjectMember>> {
         let mut cursor = block_node.walk();
         let kind_refinement = self.get_kind_id("refinement");
@@ -340,29 +340,29 @@ fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&
 }
 
 impl Ctx {
-    /// 获取路径补全建议（实时从文件系统读取）
+    /// Get path completion suggestions (read from file system in real-time)
     pub fn get_path_completions(&self, prefix: &str, file_uri: &Uri) -> Vec<PathCompletionItem> {
-        // 获取文件所在目录
+        // Get the directory where the file is located
         let current_dir = Url::parse(file_uri.as_str())
             .ok()
             .and_then(|url| url.to_file_path().ok())
             .and_then(|path| path.parent().map(|p| p.to_path_buf()))
             .unwrap_or_else(|| PathBuf::from("."));
 
-        // 解析前缀，移除 % 前缀并获取基础路径和待补全部分
+        // Parse prefix, remove % prefix and get base path and the part to complete
         let (base_path, partial) = Self::parse_path_prefix(prefix, &current_dir);
 
         log::info!("base path {:?}, partial {}", base_path, partial);
-        // 直接从文件系统读取
+        // Read directly from the file system
         Self::collect_from_filesystem(&base_path, &partial)
     }
 
-    /// 查找对象成员补全
+    /// Find object member completions
     pub fn find_members(&self, object_path: &str, current_byte_pos: usize, prefix: &str, file_path: &str) -> Vec<ObjectMember> {
-        // 首先找到当前光标所在的作用域
+        // First find the current scope at the cursor position
         let scopes = self.object_graph.find_scopes_at_position(current_byte_pos, file_path);
 log::info!("find scopes: {:?}", scopes);
-        // 尝试从当前作用域解析对象路径
+        // Try to resolve object path from the current scope
         for scope in &scopes {
             match self.get_members_or_refiments(object_path, prefix, scope) {
                 Some(results) => return results,
@@ -373,14 +373,14 @@ log::info!("find scopes: {:?}", scopes);
         Vec::new()
     }
 
-    /// 查找对象或成员的定义位置
-    /// 返回：(对象节点，成员信息)
+    /// Find the definition position of an object member
+    /// Returns: (object node, member info)
     pub fn find_obj(&self, word: &str, start_byte: usize, file_path: &str) -> (Option<Rc<RefCell<ObjectNode>>>, Option<ObjectMember>) {
-        // 首先从 object_graph 查找
-        // 首先找到当前光标所在的作用域
+        // First search from object_graph
+        // First find the current scope at the cursor position
         let scopes = self.object_graph.find_scopes_at_position(start_byte, file_path);
 
-        // 尝试从当前作用域解析对象路径
+        // Try to resolve object path from the current scope
         for scope in &scopes {
             let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, scope);
             if is_found {
@@ -394,7 +394,7 @@ log::info!("find scopes: {:?}", scopes);
                 }
             }
         }
-        // 从 document 的 root_object 查找
+        // Search from document's root_object
         if let Some(uri) = &self.current_uri {
             if let Some(document) = self.documents.get(uri) {
                 let root_obj = document.root_object.clone();
@@ -412,7 +412,7 @@ log::info!("find scopes: {:?}", scopes);
             }
         }
 
-        // 从 builtin_ctx 查找
+        // Search from builtin_ctx
         let builtin = self.builtin_ctx.clone();
         let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &builtin);
         if is_found {
@@ -428,16 +428,16 @@ log::info!("find scopes: {:?}", scopes);
         (None, None)
     }
 
-    /// 获取对象成员补全
+    /// Get object member completions
     pub fn get_object_completions(&self, object_path: &str, current_byte_pos: usize, prefix: &str, file_uri: &Uri) -> Vec<ObjectMember> {
-        // 首先从 object_graph 查找
+        // First search from object_graph
         let file_path = file_uri.to_string();
         let results = self.find_members(object_path, current_byte_pos, prefix, &file_path);
         if !results.is_empty() {
             return results;
         }
 
-        // 从 document 的 root_object 查找
+        // Search from document's root_object
         log::info!("get from opened file");
         if let Some(document) = self.documents.get(file_uri) {
             let root_obj = document.root_object.clone();
@@ -447,7 +447,7 @@ log::info!("find scopes: {:?}", scopes);
             }
         }
 
-        // 从 builtin_ctx 查找
+        // Search from builtin_ctx
         log::info!("get from builtin");
         let builtin = self.builtin_ctx.clone();
         if let Some(results) = self.get_members_from_object(object_path, prefix, &builtin) {
@@ -461,7 +461,7 @@ log::info!("find scopes: {:?}", scopes);
     fn is_any_func(t: MemberType) -> bool {
         t == MemberType::Action || t == MemberType::Function || t == MemberType::Native
     }
-    /// 从指定对象中获取成员补全
+    /// Get member completions from the specified object
     fn get_members_from_object(&self, object_path: &str, prefix: &str, root_object: &Rc<RefCell<ObjectNode>>) -> Option<Vec<ObjectMember>> {
         let parts: Vec<&str> = object_path.split('/').filter(|s| !s.is_empty()).collect();
         if let Some(name) = parts.first() {
@@ -522,7 +522,7 @@ log::info!("find scopes: {:?}", scopes);
     }
 
     fn parse_path_prefix(prefix: &str, current_dir: &Path) -> (PathBuf, String) {
-        // 移除 % 前缀
+        // Remove % prefix
         let prefix = prefix.trim_start_matches('%').trim_matches('"');
         if prefix.is_empty() {
             return (current_dir.to_path_buf(), String::new());
@@ -536,11 +536,11 @@ log::info!("find scopes: {:?}", scopes);
             }
         }
 
-        // 处理 Red 语言路径格式
-        // %folder/file.red 或 %/C/folder/file.red (Windows)
+        // Handle Red language path format
+        // %folder/file.red or %/C/folder/file.red (Windows)
         let path = Self::red_path_to_pathbuf(prefix);
 
-        // 分离目录部分和最后一部分的名称
+        // Separate the directory part and the last part's name
         let partial = path.file_name()
             .unwrap_or_default()
             .to_string_lossy()
@@ -611,7 +611,7 @@ log::info!("find scopes: {:?}", scopes);
                 let path = entry.path();
                 let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
 
-                // 跳过隐藏文件
+                // Skip hidden files
                 if name == "." || name == ".." {
                     continue;
                 }
@@ -688,7 +688,7 @@ log::info!("find scopes: {:?}", scopes);
 
     // Recursive function to collect identifiers from the tree
     pub fn walk_tree(&mut self, source_code: &str, cursor: &mut TreeCursor, base_path: Option<&Path>) {
-        // 预获取节点类型 ID
+        // Pre-fetch node type IDs
         let kind_issue = self.get_kind_id("issue");
         let kind_file = self.get_kind_id("file");
         let kind_word = self.get_kind_id("word");
@@ -767,17 +767,17 @@ log::info!("find scopes: {:?}", scopes);
 
             self.walk_tree(source_code, &mut cursor, base_path.as_deref());
 
-            // 重置 cursor 收集对象定义
+            // Reset cursor to collect object definitions
             cursor.reset(tree.root_node());
 
-            // 收集对象定义
+            // Collect object definitions
             self.collect_objects(source_code, &mut cursor, file_uri)
         } else {
             Rc::new(RefCell::new(ObjectNode::new()))
         }
     }
 
-    /// 遍历语法树收集对象（context）定义
+    /// Traverse syntax tree to collect object (context) definitions
     pub fn collect_objects(&mut self, source_code: &str, cursor: &mut TreeCursor, file_uri: &Uri) -> Rc<RefCell<ObjectNode>> {
         let obj = if let Some(old_obj) = self.include_cache.get(file_uri) {
             old_obj.clone()
@@ -801,15 +801,15 @@ log::info!("find scopes: {:?}", scopes);
         obj
     }
 
-    /// 从节点的 name 字段提取成员名称
+    /// Extract member name from node's name field
     fn extract_member_name(source_code: &str, node: &tree_sitter::Node) -> String {
         let name_node = node.child_by_field_name("name").unwrap();
         let name = get_node_text(source_code, &name_node).unwrap();
         name.trim().trim_end_matches(':').to_string()
     }
 
-    /// 遍历树收集对象和成员
-    /// scope_stack: 当前作用域栈，从外到内
+    /// Traverse tree to collect objects and members
+    /// scope_stack: Current scope stack, from outer to inner
     fn parse_object_body(
         &mut self,
         source_code: &str,
@@ -818,7 +818,7 @@ log::info!("find scopes: {:?}", scopes);
         scope_stack: &mut Vec<String>,
         scope: &mut ObjectNode
     ) {
-        // 预获取节点类型 ID
+        // Pre-fetch node type IDs
         let kind_make = self.get_kind_id("make");
         let kind_block = self.get_kind_id("block");
         let kind_word = self.get_kind_id("word");
@@ -1051,7 +1051,9 @@ log::info!("find scopes: {:?}", scopes);
                         continue;
                     }
                 }
-                //self.highlight_path_nodes(source_code, &node, tokens);
+                if let Some(path) = &self.current_uri {
+                   self.highlight_path_nodes(source_code, &node, tokens, path.as_str());
+                }
                 should_goto_child = false;
             }
 
@@ -1150,7 +1152,8 @@ log::info!("find scopes: {:?}", scopes);
         }
 
         if let Some(obj) = obj {
-            let mut ctx = obj;
+            // Use include_obj if available, otherwise use obj
+            let mut ctx = obj.borrow().include_obj.clone().unwrap_or_else(|| obj.clone());
             //tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedCtx as u32, 0));
             let mut check = true;
             for (part_node, part) in path_parts.iter() {

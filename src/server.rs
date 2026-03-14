@@ -45,15 +45,15 @@ struct RedLanguageServer {
     client_supports_delta: bool,
 }
 
-/// 补全类型
+/// Completion type
 enum CompletionType {
-    /// 文件路径补全（% 开头）
+    /// File path completion (starts with %)
     FilePath(String),
-    /// 对象成员补全（path/ 格式）
+    /// Object member completion (path/ format)
     ObjectMember(String, String),
-    /// 普通符号补全
+    /// Regular symbol completion
     Symbol(String),
-    /// 无补全
+    /// No completion
     None,
 }
 
@@ -65,12 +65,12 @@ impl RedLanguageServer {
 
         let mut ctx = analyzer::Ctx::new();
 
-        // 加载嵌入的 red-builtins.red 文件并收集内置符号
+        // Load embedded red-builtins.red file and collect built-in symbols
         log::info!("starting server");
         if let Some(builtins_content) = BuiltinsAsset::get("red-builtins.red") {
             let builtins_source = std::str::from_utf8(builtins_content.data.as_ref()).unwrap_or("");
             let builtins_tree = parser.parse(builtins_source, None);
-            // 使用虚拟 URI 表示内置文件
+            // Use virtual URI to represent built-in file
             let builtins_uri: Uri = "builtin://red-builtins.red".parse().unwrap();
             ctx.builtin_ctx = ctx.collect_identifiers(builtins_source, &builtins_tree, &builtins_uri);
             log::info!("Loaded red-builtins.red");
@@ -212,7 +212,7 @@ impl RedLanguageServer {
         let uri = params.text_document.uri.clone();
         self.ctx.current_uri = Some(uri.clone());
 
-        // 收集需要解析的行号
+        // Collect line numbers that need to be parsed
         let mut lines_to_parse: Vec<usize> = Vec::new();
 
         if let Some(document) = self.ctx.documents.get_mut(&uri) {
@@ -220,12 +220,12 @@ impl RedLanguageServer {
                 if let Some(range) = change.range {
                     lines_to_parse.push(range.start.line as usize);
 
-                    // 在应用更改之前计算旧的字节位置
+                    // Calculate old byte position before applying the change
                     let start_byte = position_to_offset_rope(&document.content, range.start);
                     let old_end_byte = position_to_offset_rope(&document.content, range.end);
                     let new_end_byte = start_byte + change.text.len();
 
-                    // 在应用更改之前计算旧的端点
+                    // Calculate old end point before applying the change
                     let start_point = tree_sitter::Point {
                         row: range.start.line as usize,
                         column: range.start.character as usize,
@@ -279,7 +279,7 @@ impl RedLanguageServer {
             }
         }
 
-        // 解析编辑的行并插入符号（在释放 document 借用后）
+        // Parse edited lines and insert symbols (after releasing document borrow)
         for line_num in lines_to_parse {
             if let Some(document) = self.ctx.documents.get(&uri) {
                 let edited_line = document.content.line(line_num).to_string();
@@ -300,14 +300,14 @@ impl RedLanguageServer {
         let position = params.text_document_position_params.position;
         self.ctx.current_uri = Some(uri.clone());
 
-        // 获取光标所在行的内容
+        // Get the content of the line where the cursor is located
         let line_content = self.get_line_at_position(uri, position);
         if line_content.is_empty() {return None};
 
         let _cursor_col = position.character as usize;
         let byte_pos = self.get_byte_offset(uri, position);
 
-        // 从语法树中提取光标位置的节点
+        // Extract the node at the cursor position from the syntax tree
         let token = self.extract_path_from_tree(uri, byte_pos);
 
         if token.is_empty() {
@@ -316,16 +316,16 @@ impl RedLanguageServer {
 
         log::info!("goto definition for: '{}' at byte {}", token, byte_pos);
 
-        // 检查是否是文件路径（以 % 开头）
+        // Check if it's a file path (starts with %)
         if token.starts_with('%') {
             return self.goto_file_path(&token, uri);
         }
 
-        // 查找对象/符号定义
+        // Look up object/symbol definition
         let file_path = uri.to_string();
         let (obj, member) = self.ctx.find_obj(&token, byte_pos, &file_path);
 
-        // 优先使用成员的位置信息
+        // Prefer using member's location information
         if let Some(member_info) = &member {
             if let (Some(byte_range), Some(file_path)) = (&member_info.byte_range, &member_info.file_path) {
                 log::info!("found member: {} at {} {:?}", member_info.name, file_path, byte_range);
@@ -343,15 +343,15 @@ impl RedLanguageServer {
         }
 
         if let Some(obj_node) = obj {
-            // 找到对象定义
+            // Found object definition
             let obj_ref = obj_node.borrow();
             log::info!("found object: {} at {} {:?}", obj_ref.name, obj_ref.file_path, obj_ref.byte_range);
 
-            // 将字节范围转换为 LSP 位置
+            // Convert byte range to LSP location
             let range = self.byte_range_to_lsp_range(&obj_ref.file_path, obj_ref.byte_range)?;
 
             let target_uri = if obj_ref.file_path.starts_with("builtin://") {
-                // 内置定义，尝试找到源文件
+                // Built-in definition, try to find source file
                 uri.clone()
             } else {
                 Uri::from_str(&obj_ref.file_path).unwrap_or_else(|_| uri.clone())
@@ -363,7 +363,7 @@ impl RedLanguageServer {
             }));
         }
 
-        // 找到成员但没有位置信息
+        // Found member but no location information
         if let Some(member_info) = &member {
             log::info!("found member without location: {:?}", member_info.name);
         }
@@ -371,9 +371,9 @@ impl RedLanguageServer {
         None
     }
 
-    /// 跳转到文件路径
+    /// Jump to file path
     fn goto_file_path(&self, file_path: &str, current_uri: &Uri) -> Option<GotoDefinitionResponse> {
-        // 移除 % 前缀和可能的引号
+        // Remove % prefix and possible quotes
         let path = file_path.trim_start_matches('%').trim_matches('"');
 
         if path.is_empty() {
@@ -382,34 +382,34 @@ impl RedLanguageServer {
 
         log::info!("goto file path: {}", path);
 
-        // 获取当前文件所在目录
+        // Get the directory of the current file
         let current_dir = Url::parse(current_uri.as_str())
             .ok()
             .and_then(|url| url.to_file_path().ok())
             .and_then(|p| p.parent().map(|parent| parent.to_path_buf()))
             .unwrap_or_else(|| PathBuf::from("."));
 
-        // 解析 Red 语言路径
+        // Parse Red language path
         let target_path = Self::red_path_to_full_path(path, &current_dir);
 
         log::info!("target path: {:?}", target_path);
 
-        // 检查文件是否存在
+        // Check if file exists
         if !target_path.exists() {
             log::warn!("file not found: {:?}", target_path);
             return None;
         }
 
-        // 转换为 URI
+        // Convert to URI
         let target_uri = Url::from_file_path(&target_path).ok()?;
         let uri_str = target_uri.as_str();
 
-        // 创建 LSP URI
+        // Create LSP URI
         let lsp_uri: Uri = Uri::from_str(&format!("\"{}\"", uri_str))
             .or_else(|_| Uri::from_str(uri_str))
             .unwrap_or_else(|_| current_uri.clone());
 
-        // 返回文件开头的位置
+        // Return location at the beginning of the file
         Some(GotoDefinitionResponse::Scalar(Location {
             uri: lsp_uri,
             range: Range {
@@ -419,19 +419,19 @@ impl RedLanguageServer {
         }))
     }
 
-    /// 将 Red 语言路径转换为完整路径
+    /// Convert Red language path to full path
     fn red_path_to_full_path(red_path: &str, current_dir: &Path) -> PathBuf {
-        // 移除可能的前导斜杠
+        // Remove leading slashes
         let path_str = red_path.trim_start_matches('/');
 
-        // 检查是否是 Windows 驱动器字母路径
+        // Check if it's a Windows drive letter path
         #[cfg(windows)]
         {
             if path_str.len() >= 1
                 && path_str.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
                 && path_str.chars().nth(1) == Some('/')
             {
-                // 驱动器字母：C/folder → C:\folder
+                // Drive letter: C/folder → C:\folder
                 let drive = path_str.chars().next().unwrap_or('C');
                 let rest = &path_str[2..];
                 let mut path = PathBuf::new();
@@ -441,25 +441,25 @@ impl RedLanguageServer {
                 }
                 return path;
             } else {
-                // 相对路径，相对于当前目录
+                // Relative path, relative to current directory
                 return current_dir.join(path_str.replace('/', "\\"));
             }
         }
 
         #[cfg(not(windows))]
         {
-            // Unix 路径
+            // Unix path
             if red_path.starts_with('/') {
                 PathBuf::from(red_path)
             } else {
-                // 相对路径，相对于当前目录
+                // Relative path, relative to current directory
                 current_dir.join(path_str)
             }
         }
     }
 
-    /// 从语法树中提取光标位置的节点文本
-    /// 根据节点类型（path, word, file）返回相应的内容
+    /// Extract node text at cursor position from syntax tree
+    /// Returns corresponding content based on node type (path, word, file)
     fn extract_path_from_tree(&self, uri: &Uri, byte_pos: usize) -> String {
         let Some(document) = self.ctx.documents.get(uri) else {
             return String::new();
@@ -472,7 +472,7 @@ impl RedLanguageServer {
         let source_code = document.content.to_string();
         let root = tree.root_node();
 
-        // 使用 descendant_for_byte_range 找到包含光标位置的节点
+        // Use descendant_for_byte_range to find the node containing the cursor position
         root.descendant_for_byte_range(byte_pos, byte_pos)
             .and_then(|node| {
                 let kind = node.kind();
@@ -480,24 +480,24 @@ impl RedLanguageServer {
 
                 log::info!("node at {}: kind={}, kind_id={}", byte_pos, kind, kind_id);
 
-                // 获取节点文本
+                // Get node text
                 let text = Self::get_node_text(&source_code, &node)?;
 
-                // 根据节点类型返回
+                // Return based on node type
                 match kind {
                     "file" => {
-                        // 文件路径，返回完整路径（包括 %）
+                        // File path, return full path (including %)
                         Some(text.to_string())
                     }
                     "word" | "path_start" | "get_word" => {
                         if let Some(parent) = node.parent() && parent.kind() == "path" {
-                            self.extract_path_to_cursor(text, byte_pos - parent.start_byte())
+                            self.extract_path_to_cursor(Self::get_node_text(&source_code, &parent)?, byte_pos - parent.start_byte())
                         } else {
                             Some(text.to_string())
                         }
                     }
                     _ => {
-                        // 其他类型，尝试返回文本
+                        // Other types, try to return text
                         Some(String::new())
                     }
                 }
@@ -505,7 +505,7 @@ impl RedLanguageServer {
             .unwrap_or_default()
     }
 
-    /// 获取节点文本
+    /// Get node text
     fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&'a str> {
         let start_byte = node.start_byte();
         let end_byte = node.end_byte();
@@ -517,11 +517,11 @@ impl RedLanguageServer {
         }
     }
 
-    /// 从路径中提取到光标位置的部分
+    /// Extract path portion up to cursor position
     fn extract_path_to_cursor(&self, path: &str, cursor_offset: usize) -> Option<String> {
         log::info!("extract_path_to_cursor: path='{}', cursor_offset={}", path, cursor_offset);
 
-        // 将路径按 / 分割
+        // Split path by /
         let parts: Vec<&str> = path.split('/').collect();
 
         let mut pos = 0;
@@ -533,28 +533,28 @@ impl RedLanguageServer {
 
             log::info!("  checking part='{}', start={}, end={}, cursor_offset={}", part, part_start, part_end, cursor_offset);
 
-            // 检查光标是否在这个部分内
+            // Check if cursor is within this part
             if cursor_offset >= part_start && cursor_offset <= part_end {
-                // 光标在这个部分，返回到当前部分为止的路径（包括之前的所有部分）
+                // Cursor is in this part, return path up to current part (including all previous parts)
                 result_parts.push(part);
                 let result = result_parts.join("/");
                 log::info!("  found! returning: '{}'", result);
                 return Some(result);
             }
 
-            // 还没到光标所在部分，先保存这个部分
+            // Haven't reached cursor part yet, save this part first
             result_parts.push(part);
             pos = part_end + 1; // +1 for the '/'
         }
 
-        // 光标在路径末尾，返回完整路径
+        // Cursor at end of path, return full path
         log::info!("  cursor at end, returning: '{}'", path);
         Some(path.to_string())
     }
 
-    /// 将字节范围转换为 LSP 位置范围
+    /// Convert byte range to LSP range
     fn byte_range_to_lsp_range(&self, file_path: &str, byte_range: (usize, usize)) -> Option<Range> {
-        // 尝试从 documents 中获取文件内容
+        // Try to get file content from documents
         let uri = Uri::from_str(file_path).ok()?;
 
         if let Some(document) = self.ctx.documents.get(&uri) {
@@ -566,7 +566,7 @@ impl RedLanguageServer {
             });
         }
 
-        // 如果文件不在打开的文档中，尝试从文件读取
+        // If file is not in open documents, try to read from file
         if let Ok(content) = std::fs::read_to_string(file_path) {
             let rope = Rope::from_str(&content);
             let start_pos = self.byte_to_position(&rope, byte_range.0);
@@ -580,7 +580,7 @@ impl RedLanguageServer {
         None
     }
 
-    /// 将字节偏移量转换为 LSP 位置
+    /// Convert byte offset to LSP position
     fn byte_to_position(&self, rope: &Rope, byte_offset: usize) -> Position {
         let char_offset = rope.byte_to_char(byte_offset.min(rope.len_bytes()));
         let line = rope.char_to_line(char_offset);
@@ -599,24 +599,24 @@ impl RedLanguageServer {
 
         let byte_pos = self.get_byte_offset(uri, position);
 
-        // 从语法树中提取光标位置的节点类型，确定补全类型
+        // Extract node type at cursor position from syntax tree to determine completion type
         let completion_type = self.get_completion_type_from_tree(uri, byte_pos);
 
         match completion_type {
             CompletionType::FilePath(path_prefix) => {
-                // 文件路径补全
+                // File path completion
                 let completions = self.ctx.get_path_completions(&path_prefix, uri);
                 let items = get_path_completion_items(&completions);
                 Some(lsp_types::CompletionResponse::Array(items))
             }
             CompletionType::ObjectMember(object_path, member_prefix) => {
-                // 对象成员补全
+                // Object member completion
                 let members = self.ctx.get_object_completions(&object_path, byte_pos, &member_prefix, uri);
                 let items = get_object_completion_items(&members);
                 Some(lsp_types::CompletionResponse::Array(items))
             }
             CompletionType::Symbol(prefix) => {
-                // 普通符号补全
+                // Regular symbol completion
                 if prefix.is_empty() {
                     Some(lsp_types::CompletionResponse::Array(vec![]))
                 } else {
@@ -631,7 +631,7 @@ impl RedLanguageServer {
         }
     }
 
-    /// 从语法树中获取光标位置的补全类型
+    /// Get completion type from syntax tree at cursor position
     fn get_completion_type_from_tree(&self, uri: &Uri, byte_pos: usize) -> CompletionType {
         let Some(document) = self.ctx.documents.get(uri) else {
             return CompletionType::None;
@@ -644,17 +644,17 @@ impl RedLanguageServer {
         let source_code = document.content.to_string();
         let root = tree.root_node();
 
-        // 找到包含光标位置的节点
+        // Find the node containing the cursor position
         if let Some(node) = root.descendant_for_byte_range(byte_pos-1, byte_pos-1) {
             let kind = node.kind();
             log::info!("completion at {}: kind={}", byte_pos, kind);
 
-            // 获取节点文本
+            // Get node text
             if let Some(text) = Self::get_node_text(&source_code, &node) {
                 log::info!("completion text {}", text);
                 match kind {
                     "file" => {
-                        // 文件路径补全
+                        // File path completion
                         return CompletionType::FilePath(text.to_string());
                     }
                     "word" | "path_start" | "get_word" => {
@@ -662,7 +662,7 @@ impl RedLanguageServer {
                             let cursor_offset = byte_pos - node.start_byte();
                             return self.get_object_path_completion(Self::get_node_text(&source_code, &parent).unwrap(), cursor_offset);
                         } else {
-                            // 普通符号补全
+                            // Regular symbol completion
                             return CompletionType::Symbol(text.to_string());
                         }
                     }
@@ -678,26 +678,26 @@ impl RedLanguageServer {
         CompletionType::None
     }
 
-    /// 获取对象路径补全类型
+    /// Get object path completion type
     fn get_object_path_completion(&self, path: &str, cursor_offset: usize) -> CompletionType {
-        // 找到最后一个 / 的位置
+        // Find the position of the last /
         if let Some(last_slash) = path.rfind('/') {
             if cursor_offset > last_slash {
-                // 光标在最后一个 / 之后，补全成员
+                // Cursor is after the last /, complete members
                 let object_path = path[..last_slash].to_string();
                 let member_prefix = path[last_slash + 1..].to_string();
                 return CompletionType::ObjectMember(object_path, member_prefix);
             } else {
-                // 光标在最后一个 / 之前，继续解析前面的路径
+                // Cursor is before the last /, continue parsing the preceding path
                 return self.get_object_path_completion(&path[..last_slash], cursor_offset);
             }
         }
 
-        // 没有 /，补全对象路径
+        // No /, complete object path
         CompletionType::ObjectMember(String::new(), path.to_string())
     }
 
-    /// 回退到基于字符串的方法
+    /// Fallback to string-based method
     fn get_completion_type_fallback(&self, uri: &Uri, byte_pos: usize) -> CompletionType {
         let Some(document) = self.ctx.documents.get(uri) else {
             return CompletionType::None;
@@ -705,7 +705,7 @@ impl RedLanguageServer {
 
         let source_code = document.content.to_string();
 
-        // 找到光标所在行的开始位置
+        // Find the start position of the line where the cursor is located
         let line_start = source_code[..byte_pos].rfind('\n').map(|i| i + 1).unwrap_or(0);
         let before_cursor = &source_code[line_start..byte_pos];
 
@@ -732,7 +732,7 @@ log::info!("fallback... {}", token);
         CompletionType::Symbol(token.to_string())
     }
 
-    /// 获取指定行的内容
+    /// Get the content of the specified line
     fn get_line_at_position(&self, uri: &lsp_types::Uri, position: lsp_types::Position) -> String {
         if let Some(document) = self.ctx.documents.get(uri) {
             let line_num = position.line as usize;
@@ -745,7 +745,7 @@ log::info!("fallback... {}", token);
         String::new()
     }
 
-    /// 获取光标位置的字节偏移量
+    /// Get the byte offset at cursor position
     fn get_byte_offset(&self, uri: &lsp_types::Uri, position: lsp_types::Position) -> usize {
         if let Some(document) = self.ctx.documents.get(uri) {
             let line_num = position.line as usize;
@@ -756,17 +756,17 @@ log::info!("fallback... {}", token);
         0
     }
 
-    /// 从行内容中提取 Red 语言路径前缀（以 % 开头）
-    /// 返回光标位置之前的路径前缀（包含 %）
+    /// Extract Red language path prefix from line content (starts with %)
+    /// Returns the path prefix before cursor position (including %)
     fn extract_path_prefix(&self, line_content: &str, cursor_col: usize) -> Option<String> {
         if cursor_col == 0 || cursor_col > line_content.len() {
             return None;
         }
 
-        // 获取光标之前的内容
+        // Get content before cursor
         let before_cursor = &line_content[..cursor_col];
 
-        // 查找最后一个空白字符，确定当前 token 的起始位置
+        // Find the last whitespace character to determine the start of current token
         let token_start = before_cursor
             .char_indices()
             .rfind(|(_, c)| !is_word_char(*c))
@@ -775,7 +775,7 @@ log::info!("fallback... {}", token);
 
         let token = &before_cursor[token_start..];
 
-        // 检查 token 是否以 % 开头（Red 语言路径格式）
+        // Check if token starts with % (Red language path format)
         if token.starts_with('%') {
             Some(token.to_string())
         } else {
@@ -783,14 +783,14 @@ log::info!("fallback... {}", token);
         }
     }
 
-    /// 从行内容中提取对象路径（如 obj1/ 或 obj1/d/）
-    /// 返回 (对象路径，成员前缀)
+    /// Extract object path from line content (e.g., obj1/ or obj1/d/)
+    /// Returns (object path, member prefix)
     fn extract_object_path(&self, line_content: &str, cursor_col: usize) -> Option<(String, String)> {
         if cursor_col == 0 || cursor_col > line_content.len() {
             return None;
         }
 
-        // 获取光标之前的内容
+        // Get content before cursor
         let before_cursor = &line_content[..cursor_col];
 
         let token_start = before_cursor
@@ -801,14 +801,14 @@ log::info!("fallback... {}", token);
 
         let token = &before_cursor[token_start..];
 
-        // 检查 token 是否包含 / 但不以 % 开头（对象成员访问）
+        // Check if token contains / but doesn't start with % (object member access)
         if token.contains('/') && !token.starts_with('%') {
-            // 分割对象路径和成员前缀
-            // 例如：obj1/a  -> 对象路径："obj1", 成员前缀："a"
-            //       obj1/   -> 对象路径："obj1", 成员前缀：""
-            //       obj1/d/ -> 对象路径："obj1/d", 成员前缀：""
+            // Split object path and member prefix
+            // For example: obj1/a  -> object path: "obj1", member prefix: "a"
+            //              obj1/   -> object path: "obj1", member prefix: ""
+            //              obj1/d/ -> object path: "obj1/d", member prefix: ""
 
-            // 找到最后一个 / 的位置
+            // Find the position of the last /
             if let Some(last_slash) = token.rfind('/') {
                 let object_path = &token[..last_slash];
                 let member_prefix = &token[last_slash + 1..];
@@ -826,9 +826,9 @@ log::info!("fallback... {}", token);
         let uri = &params.text_document.uri;
         self.ctx.current_uri = Some(uri.clone());
 
-        // 如果是 include 缓存中的文件，不从 object_graph 中移除（因为可能被多个文件引用）
+        // If it's a file in include cache, don't remove from object_graph (because it may be referenced by multiple files)
         if !self.ctx.include_cache.contains_key(uri) {
-            // 从 object_graph 中移除该文件的对象
+            // Remove objects of this file from object_graph
             let file_path = uri.to_string();
             self.ctx.object_graph.remove_objects_by_file(&file_path);
         }
@@ -988,7 +988,7 @@ log::info!("fallback... {}", token);
     }
 }
 
-/// 快速判断 ASCII 字符是否为单词字符（使用查找表）
+/// Quickly determine if an ASCII character is a word character (using lookup table)
 const fn is_ascii_word_char(c: u8) -> bool {
     matches!(c,
         b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'=' |
@@ -998,11 +998,11 @@ const fn is_ascii_word_char(c: u8) -> bool {
 
 #[inline]
 fn is_word_char(c: char) -> bool {
-    // ASCII 路径使用快速查找表
+    // Use fast lookup table for ASCII paths
     if c.is_ascii() {
         is_ascii_word_char(c as u8)
     } else {
-        // 非 ASCII 字符（Unicode）使用 is_alphanumeric
+        // Use is_alphanumeric for non-ASCII characters (Unicode)
         c.is_alphanumeric()
     }
 }
@@ -1018,7 +1018,7 @@ fn get_red_completions(symbols: &Vec<String>) -> Vec<lsp_types::CompletionItem> 
         .collect()
 }
 
-/// 将路径补全项转换为 LSP 补全项
+/// Convert path completion items to LSP completion items
 fn get_path_completion_items(completions: &Vec<analyzer::PathCompletionItem>) -> Vec<lsp_types::CompletionItem> {
     completions
         .iter()
@@ -1029,7 +1029,7 @@ fn get_path_completion_items(completions: &Vec<analyzer::PathCompletionItem>) ->
                 lsp_types::CompletionItemKind::FILE
             };
 
-            // 为目录添加尾随斜杠
+            // Add trailing slash for directories
             let label = if comp.is_dir {
                 format!("{}/", comp.label)
             } else {
@@ -1045,7 +1045,7 @@ fn get_path_completion_items(completions: &Vec<analyzer::PathCompletionItem>) ->
         .collect()
 }
 
-/// 将对象成员转换为 LSP 补全项
+/// Convert object members to LSP completion items
 fn get_object_completion_items(members: &Vec<analyzer::ObjectMember>) -> Vec<lsp_types::CompletionItem> {
     members
         .iter()
@@ -1297,7 +1297,7 @@ fn apply_content_change(rope: &mut Rope, new_text: &str, range: Range) {
     let end_line = range.end.line as usize;
     let end_char = range.end.character as usize;
 
-    // 边界检查：确保行号不超出范围
+    // Boundary check: ensure line numbers don't exceed range
     let max_line = rope.len_lines().saturating_sub(1);
     let start_line = start_line.min(max_line);
     let end_line = end_line.min(max_line);
@@ -1306,7 +1306,7 @@ fn apply_content_change(rope: &mut Rope, new_text: &str, range: Range) {
     let start_offset = rope.line_to_char(start_line) + start_char;
     let end_offset = rope.line_to_char(end_line) + end_char;
 
-    // 边界检查：确保偏移量不超出 rope 长度
+    // Boundary check: ensure offsets don't exceed rope length
     let rope_len = rope.len_chars();
     let start_offset = start_offset.min(rope_len);
     let end_offset = end_offset.min(rope_len);
@@ -1348,18 +1348,18 @@ fn position_to_offset_rope(rope: &Rope, position: Position) -> usize {
     let line = position.line as usize;
     let char = position.character as usize;
 
-    // 边界检查：确保行号不超出范围
+    // Boundary check: ensure line numbers don't exceed range
     let line = line.min(rope.len_lines().saturating_sub(1));
 
     let char_offset = rope.line_to_char(line) + char;
 
-    // 边界检查：确保字符偏移量不超出 rope 长度
+    // Boundary check: ensure character offset doesn't exceed rope length
     let char_offset = char_offset.min(rope.len_chars());
 
     rope.char_to_byte(char_offset)
 }
 
-/// 将字节偏移量转换为 (line, column) 位置
+/// Convert byte offset to (line, column) position
 fn offset_to_position(rope: &Rope, byte_offset: usize) -> Position {
     // Ropey gives us a way to map byte offsets to character indices
     let char_idx = rope.byte_to_char(byte_offset);
