@@ -917,7 +917,7 @@ log::info!("fallback... {}", token);
     }
 }
 
-fn get_red_completions(symbols: &Vec<String>) -> Vec<lsp_types::CompletionItem> {
+fn get_red_completions(symbols: &[String]) -> Vec<lsp_types::CompletionItem> {
     symbols
         .iter()
         .map(|word| lsp_types::CompletionItem {

@@ -13,6 +13,52 @@ use std::cell::RefCell;
 
 pub const ANONYMOUS_OBJ: &str = "$anonymous$";
 
+/// Normalize a name to lowercase for case-insensitive comparison
+#[inline]
+fn normalize_name(name: &str) -> String {
+    name.to_lowercase()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NormalizedName(String);
+
+impl NormalizedName {
+    #[inline]
+    pub fn new(name: &str) -> Self {
+        Self(normalize_name(name))
+    }
+}
+
+impl From<&str> for NormalizedName {
+    #[inline]
+    fn from(name: &str) -> Self {
+        Self::new(name)
+    }
+}
+
+impl From<String> for NormalizedName {
+    #[inline]
+    fn from(name: String) -> Self {
+        Self::new(&name)
+    }
+}
+
+impl std::ops::Deref for NormalizedName {
+    type Target = str;
+    
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for NormalizedName {
+    #[inline]
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenType {    // @@ need to sync with SemanticTokensLegend
     RedFunction,
@@ -63,7 +109,7 @@ pub struct ObjectMember {
 pub struct ObjectNode {
     pub name: String,                    // Object name (e.g., "a")
     pub scope_path: String,              // Full scope path (e.g., "a/b/a")
-    pub members: StringRadixMap<ObjectMember>,
+    pub members: SymbolsMap<ObjectMember>,  // Case-insensitive member lookup
     pub byte_range: (usize, usize),      // Byte range of object in source code
     pub file_path: String,
     pub include_obj: Option<Rc<RefCell<ObjectNode>>>    // link to another object
@@ -74,9 +120,14 @@ impl ObjectNode {
         Self {
             name: String::new(),
             scope_path: String::new(),
-            members: StringRadixMap::new(),
+            members: SymbolsMap::new(),
             ..Default::default()
         }
+    }
+    
+    /// Get member with case-insensitive lookup
+    pub fn get_member(&self, name: &str) -> Option<ObjectMember> {
+        self.members.get(name)
     }
 }
 
@@ -85,14 +136,14 @@ impl ObjectNode {
 pub struct ObjectGraph {
     /// Scope path -> Object node
     pub objects: HashMap<String, Rc<RefCell<ObjectNode>>>,
-    /// Object name -> All scope paths for that name (uses HashSet for fast removal)
-    pub name_to_scopes: HashMap<String, HashSet<String>>,
+    /// Normalized object name -> All scope paths for that name (uses HashSet for fast removal)
+    pub name_to_scopes: HashMap<NormalizedName, HashSet<String>>,
     /// File path -> range_map for that file (start_byte -> scope_path)
     file_range_maps: HashMap<String, BTreeMap<usize, String>>,
     /// File path -> All scope paths in that file, for fast removal
     file_to_scopes: HashMap<String, Vec<String>>,
     /// Scope path -> Object name, for fast removal from name_to_scopes
-    scope_to_name: HashMap<String, String>,
+    scope_to_name: HashMap<String, NormalizedName>,
 }
 
 impl ObjectGraph {
@@ -117,8 +168,9 @@ impl ObjectGraph {
         obj.name = name.clone();
         let file_path = obj.file_path.clone();
 
-        // Record name to scope mapping (using HashSet)
-        self.name_to_scopes.entry(name.clone()).or_insert_with(HashSet::new).insert(scope_path.clone());
+        // Record name to scope mapping (using HashSet) - normalize name for case-insensitive comparison
+        let normalized_name = NormalizedName::from(name.as_str());
+        self.name_to_scopes.entry(normalized_name.clone()).or_insert_with(HashSet::new).insert(scope_path.clone());
         // Also insert into the file's range_map for fast lookup
         self.file_range_maps
             .entry(file_path.clone())
@@ -127,7 +179,7 @@ impl ObjectGraph {
         // Record file to scope mapping for fast removal
         self.file_to_scopes.entry(file_path).or_insert_with(Vec::new).push(scope_path.clone());
         // Record scope to name mapping for fast removal from name_to_scopes
-        self.scope_to_name.insert(scope_path.clone(), name.clone());
+        self.scope_to_name.insert(scope_path.clone(), normalized_name);
         self.objects.insert(scope_path, Rc::new(RefCell::new(obj)));
     }
 
@@ -215,8 +267,33 @@ impl ObjectGraph {
 
     /// Find child object under the specified scope
     fn find_child_object(&self, parent_scope: &Rc<RefCell<ObjectNode>>, child_name: &str) -> Option<&Rc<RefCell<ObjectNode>>> {
+        // Use normalized name for case-insensitive lookup
+        let normalized_name = NormalizedName::from(child_name);
         let scope_path = format!("{}/{}", parent_scope.borrow().scope_path, child_name);
-        self.objects.get(&scope_path)
+        
+        // First try exact match
+        if let Some(obj) = self.objects.get(&scope_path) {
+            return Some(obj);
+        }
+        
+        // Try case-insensitive lookup via name_to_scopes
+        if let Some(scopes) = self.name_to_scopes.get(&normalized_name) {
+            let parent_path = &parent_scope.borrow().scope_path;
+            for scope in scopes {
+                // Check if this scope is a direct child of parent
+                if let Some(parent_end) = scope.rfind('/') {
+                    let parent = &scope[..parent_end];
+                    if parent == parent_path {
+                        return self.objects.get(scope);
+                    }
+                } else if parent_path.is_empty() {
+                    // Top-level object
+                    return self.objects.get(scope);
+                }
+            }
+        }
+        
+        None
     }
 }
 
@@ -379,12 +456,12 @@ log::info!("find scopes: {:?}", scopes);
         let obj = obj.borrow().include_obj.clone().unwrap_or_else(|| obj.clone());
         if is_found {
             let member = member_name.and_then(|name| {
-                obj.as_ref().borrow().members.get(&name).cloned()
+                obj.as_ref().borrow().get_member(&name)
             });
             return (Some(obj.clone()), member);
         } else {
-            if let Some(member) = obj.borrow().members.get(word) {
-                return (None, Some(member.clone()));
+            if let Some(member) = obj.borrow().get_member(word) {
+                return (None, Some(member));
             }
         }
         (None, None)
@@ -403,12 +480,12 @@ log::info!("find scopes: {:?}", scopes);
             let obj = obj.borrow().include_obj.clone().unwrap_or_else(|| obj.clone());
             if is_found {
                 let member = member_name.and_then(|name| {
-                    obj.as_ref().borrow().members.get(&name).cloned()
+                    obj.as_ref().borrow().get_member(&name)
                 });
                 return (Some(obj.clone()), member);
             } else {
-                if let Some(member) = obj.borrow().members.get(word) {
-                   return (None, Some(member.clone()));
+                if let Some(member) = obj.borrow().get_member(word) {
+                   return (None, Some(member));
                 }
             }
         }
@@ -470,8 +547,10 @@ log::info!("find scopes: {:?}", scopes);
                 } else {
                     // try to find it in root_object
                     log::info!("finding it in root");
-                    if let Some(member) = root_object.borrow().members.get(name) && Self::is_any_func(member.member_type.clone()) {
-                       return self.get_refinements_from_member(member);
+                    if let Some(member) = root_object.borrow().get_member(name) {
+                        if Self::is_any_func(member.member_type.clone()) {
+                            return self.get_refinements_from_member(&member);
+                        }
                     }
                 }
             }
@@ -487,16 +566,16 @@ log::info!("find scopes: {:?}", scopes);
             let obj_ref = obj.borrow();
             if let Some(obj) = &obj_ref.include_obj {
                 let results : Vec<ObjectMember> = if prefix.is_empty() {
-                    obj.borrow().members.values().cloned().collect()
+                    obj.borrow().members.values()
                 } else {
-                    obj.borrow().members.iter_prefix(prefix).map(|(_, v)| v.clone()).collect()
+                    obj.borrow().members.find_by_prefix(prefix)
                 };
                 return Some(results);
             } else {
                 let results : Vec<ObjectMember> = if prefix.is_empty() {
-                    obj_ref.members.values().cloned().collect()
+                    obj_ref.members.values()
                 } else {
-                    obj_ref.members.iter_prefix(prefix).map(|(_, v)| v.clone()).collect()
+                    obj_ref.members.find_by_prefix(prefix)
                 };
                 return Some(results);
             }
@@ -507,12 +586,16 @@ log::info!("find scopes: {:?}", scopes);
                 let obj_ref = obj.borrow();
                 if let Some(inc_obj) = &obj_ref.include_obj {
                     let inc_obj_ref = inc_obj.borrow();
-                    if let Some(member) = inc_obj_ref.members.get(&part) && Self::is_any_func(member.member_type.clone()) {
-                        return self.get_refinements_from_member(member);
+                    if let Some(member) = inc_obj_ref.get_member(&part) {
+                        if Self::is_any_func(member.member_type.clone()) {
+                            return self.get_refinements_from_member(&member);
+                        }
                     }
                 } else {
-                    if let Some(member) = obj_ref.members.get(&part) && Self::is_any_func(member.member_type.clone()) {
-                        return self.get_refinements_from_member(member);
+                    if let Some(member) = obj_ref.get_member(&part) {
+                        if Self::is_any_func(member.member_type.clone()) {
+                            return self.get_refinements_from_member(&member);
+                        }
                     }
                 }
             }
@@ -940,7 +1023,8 @@ log::info!("find scopes: {:?}", scopes);
                 let (include_uri, _) = Self::red_file_to_uri(&include_path, base_dir);
                 if let Some(include_uri) = include_uri {
                      if let Some(obj) = self.include_cache.get(&include_uri) {
-                         for (key, value) in obj.borrow().members.iter() {
+                         let borrowed = obj.borrow();
+                         for (key, value) in borrowed.members.iter() {
                              if value.member_type == MemberType::Object {
                                  scope_stack.push(key.clone());
                                  let empty_scope = Rc::new(RefCell::new(ObjectNode::new()));
@@ -956,7 +1040,7 @@ log::info!("find scopes: {:?}", scopes);
                                      });
                                  scope_stack.pop();
                              }
-                             scope.members.insert(key.clone(), value.clone());
+                             scope.members.insert(&key, value.clone());
                          }
                      }
                  }
@@ -986,8 +1070,10 @@ log::info!("find scopes: {:?}", scopes);
                 let name = CompactString::from(&member_name);
                 let node_start = node.start_byte();
                 let node_end = node.end_byte();
+
+                // Insert with case-insensitive key
                 scope.members.insert(
-                    member_name,
+                    &member_name,
                     ObjectMember {
                         name,
                         member_type,
@@ -1170,7 +1256,7 @@ log::info!("highlight Path node: start_word {}", start_word);
             for (part_node, part) in path_parts.iter() {
                 let mut token_type = TokenType::RedVariable;
                 log::info!("highlight path part: {}", part);
-                if check && let Some(member) = ctx.borrow().members.get(part) {
+                if check && let Some(member) = ctx.borrow().get_member(part) {
                     log::info!("highlight path member3: {:?}", member);
                     match member.member_type {
                         MemberType::Function => token_type = TokenType::RedFunction,
@@ -1205,7 +1291,7 @@ log::info!("highlight Path node: start_word {}", start_word);
 }
 
 #[derive(Debug, Clone)]
-enum Symbol {
+pub enum Symbol {
     /// Zero extra heap allocation: uses the key already in the Trie
     SameAsKey,
     /// Stores a different casing (e.g. "Abc") inline if <= 24 chars
@@ -1237,14 +1323,25 @@ impl Symbol {
             _ => {}
         }
     }
+    
+    /// Get the original word from the symbol
+    fn get_word(&self, key: &str) -> String {
+        match self {
+            Symbol::SameAsKey => key.to_string(),
+            Symbol::Different(s) => s.to_string(),
+            Symbol::Multiple(list) => list.first().map(|s| s.to_string()).unwrap_or_else(|| key.to_string()),
+        }
+    }
 }
 
+/// Symbol table with case-insensitive lookup for string storage
+#[derive(Debug, Clone)]
 pub struct Symbols {
     map: StringRadixMap<Symbol>,
 }
 
 impl Symbols {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             map: StringRadixMap::new(),
         }
@@ -1252,7 +1349,6 @@ impl Symbols {
 
     pub fn insert(&mut self, word: &str) {
         let key = word.to_lowercase();
-        // Entry API for fast, single-lookup insertion
         self.map
             .entry(key.clone())
             .and_modify(|v| v.add(word, &key))
@@ -1265,19 +1361,114 @@ impl Symbols {
             });
     }
 
+    /// Get value by exact or case-insensitive match (returns the original word)
+    pub fn get(&self, word: &str) -> Option<String> {
+        let key = word.to_lowercase();
+        self.map.get(&key).map(|s| s.get_word(&key))
+    }
+
+    /// Check if key exists (case-insensitive)
+    pub fn contains_key(&self, word: &str) -> bool {
+        let key = word.to_lowercase();
+        self.map.contains_key(&key)
+    }
+
+    /// Find all values by prefix (case-insensitive)
     pub fn find_by_prefix(&self, prefix: &str) -> Vec<String> {
         let normalized = prefix.to_lowercase();
         let mut results = Vec::new();
 
-        // iterate_prefix returns an iterator over all entries starting with 'normalized'
         for (key, symbol) in self.map.iter_prefix(&normalized) {
-            match symbol {
-                Symbol::SameAsKey => results.push(key.to_string()),
-                Symbol::Different(s) => results.push(s.to_string()),
-                Symbol::Multiple(list) => results.extend(list.iter().map(|s| s.to_string())),
-            }
+            results.push(symbol.get_word(&key));
         }
         results
+    }
+    
+    /// Get all values (returns original words)
+    pub fn values(&self) -> Vec<String> {
+        self.map.iter().map(|(k, s)| s.get_word(&k)).collect()
+    }
+    
+    /// Clear all entries
+    pub fn clear(&mut self) {
+        self.map.clear();
+    }
+}
+
+impl Default for Symbols {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Generic symbol map with case-insensitive lookup and value storage
+#[derive(Debug, Clone)]
+pub struct SymbolsMap<T> {
+    map: StringRadixMap<(Symbol, T)>,
+}
+
+impl<T: Clone> SymbolsMap<T> {
+    pub fn new() -> Self {
+        Self {
+            map: StringRadixMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, word: &str, value: T) {
+        let key = word.to_lowercase();
+        self.map
+            .entry(key.clone())
+            .and_modify(|(sym, _)| sym.add(word, &key))
+            .or_insert_with(|| {
+                let sym = if word == key {
+                    Symbol::SameAsKey
+                } else {
+                    Symbol::Different(CompactString::from(word))
+                };
+                (sym, value)
+            });
+    }
+
+    /// Get value by exact or case-insensitive match
+    pub fn get(&self, word: &str) -> Option<T> {
+        let key = word.to_lowercase();
+        self.map.get(&key).map(|(_, v)| v.clone())
+    }
+
+    /// Check if key exists (case-insensitive)
+    pub fn contains_key(&self, word: &str) -> bool {
+        let key = word.to_lowercase();
+        self.map.contains_key(&key)
+    }
+
+    /// Find all values by prefix (case-insensitive)
+    pub fn find_by_prefix(&self, prefix: &str) -> Vec<T> {
+        let normalized = prefix.to_lowercase();
+        self.map
+            .iter_prefix(&normalized)
+            .map(|(_, (_, v))| v.clone())
+            .collect()
+    }
+    
+    /// Get all values
+    pub fn values(&self) -> Vec<T> {
+        self.map.values().map(|(_, v)| v.clone()).collect()
+    }
+    
+    /// Iterate over all entries, returning (original_word, value) pairs
+    pub fn iter(&self) -> Vec<(String, T)> {
+        self.map.iter().map(|(k, (s, v))| (s.get_word(&k), v.clone())).collect()
+    }
+    
+    /// Clear all entries
+    pub fn clear(&mut self) {
+        self.map.clear();
+    }
+}
+
+impl<T: Clone> Default for SymbolsMap<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
