@@ -4,7 +4,7 @@ use ropey::Rope;
 use tree_sitter::{Tree, TreeCursor};
 use compact_str::CompactString;
 use fast_radix_trie::StringRadixMap;
-use std::{fs, mem};
+use std::fs;
 use std::path::{Path, PathBuf};
 use url::Url;
 use std::collections::BTreeMap;

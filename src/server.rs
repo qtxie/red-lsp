@@ -759,72 +759,6 @@ log::info!("fallback... {}", token);
         0
     }
 
-    /// Extract Red language path prefix from line content (starts with %)
-    /// Returns the path prefix before cursor position (including %)
-    fn extract_path_prefix(&self, line_content: &str, cursor_col: usize) -> Option<String> {
-        if cursor_col == 0 || cursor_col > line_content.len() {
-            return None;
-        }
-
-        // Get content before cursor
-        let before_cursor = &line_content[..cursor_col];
-
-        // Find the last whitespace character to determine the start of current token
-        let token_start = before_cursor
-            .char_indices()
-            .rfind(|(_, c)| !is_word_char(*c))
-            .map(|(idx, _)| idx + 1)
-            .unwrap_or(0);
-
-        let token = &before_cursor[token_start..];
-
-        // Check if token starts with % (Red language path format)
-        if token.starts_with('%') {
-            Some(token.to_string())
-        } else {
-            None
-        }
-    }
-
-    /// Extract object path from line content (e.g., obj1/ or obj1/d/)
-    /// Returns (object path, member prefix)
-    fn extract_object_path(&self, line_content: &str, cursor_col: usize) -> Option<(String, String)> {
-        if cursor_col == 0 || cursor_col > line_content.len() {
-            return None;
-        }
-
-        // Get content before cursor
-        let before_cursor = &line_content[..cursor_col];
-
-        let token_start = before_cursor
-            .char_indices()
-            .rfind(|(_, c)| !is_word_char(*c))
-            .map(|(idx, _)| idx + 1)
-            .unwrap_or(0);
-
-        let token = &before_cursor[token_start..];
-
-        // Check if token contains / but doesn't start with % (object member access)
-        if token.contains('/') && !token.starts_with('%') {
-            // Split object path and member prefix
-            // For example: obj1/a  -> object path: "obj1", member prefix: "a"
-            //              obj1/   -> object path: "obj1", member prefix: ""
-            //              obj1/d/ -> object path: "obj1/d", member prefix: ""
-
-            // Find the position of the last /
-            if let Some(last_slash) = token.rfind('/') {
-                let object_path = &token[..last_slash];
-                let member_prefix = &token[last_slash + 1..];
-
-                if !object_path.is_empty() {
-                    return Some((object_path.to_string(), member_prefix.to_string()));
-                }
-            }
-        }
-
-        None
-    }
-
     fn handle_text_document_did_close(&mut self, params: DidCloseTextDocumentParams) {
         let uri = &params.text_document.uri;
         self.ctx.current_uri = Some(uri.clone());
@@ -838,25 +772,6 @@ log::info!("fallback... {}", token);
 
         self.ctx.documents.remove(uri);
         self.semantic_tokens_cache.remove(uri);
-    }
-
-    fn handle_text_document_did_save(&mut self, params: DidSaveTextDocumentParams) {
-        let uri = params.text_document.uri.clone();
-        self.ctx.current_uri = Some(uri.clone());
-
-        // Re-run collect_identifiers to update symbols
-        if let Some(document) = self.ctx.documents.get(&uri) {
-            let content = document.content.to_string();
-            if let Some(tree) = &document.tree {
-                // Re-collect identifiers and update object graph
-                // First remove old objects from this file
-                let file_path = uri.to_string();
-                self.ctx.object_graph.remove_objects_by_file(&file_path);
-
-                // Then re-collect
-                self.ctx.collect_identifiers(&content, &Some(tree.clone()), &uri);
-            }
-        }
     }
 
     fn handle_semantic_tokens_full(
@@ -982,50 +897,23 @@ log::info!("fallback... {}", token);
         }
     }
 
-    fn get_word_at_position(&self, line_content: &str, char_num: usize) -> String {
-        if line_content.is_empty() {return line_content.to_string()};
+    fn handle_text_document_did_save(&mut self, params: DidSaveTextDocumentParams) {
+        let uri = params.text_document.uri.clone();
+        self.ctx.current_uri = Some(uri.clone());
 
-        // Get the word at the cursor position
-        let chars: Vec<char> = line_content.chars().collect();
-        let end_num = chars.len();
-        if char_num <= end_num {
-            // Find word start
-            let mut start = char_num;
-            while start > 0 && is_word_char(chars[start - 1]) {
-                start -= 1;
-            }
+        // Re-run collect_identifiers to update symbols
+        if let Some(document) = self.ctx.documents.get(&uri) {
+            let content = document.content.to_string();
+            if let Some(tree) = &document.tree {
+                // Re-collect identifiers and update object graph
+                // First remove old objects from this file
+                let file_path = uri.to_string();
+                self.ctx.object_graph.remove_objects_by_file(&file_path);
 
-            // Find word end
-            let mut end = char_num;
-            while end < end_num && is_word_char(chars[end]) {
-                end += 1;
-            }
-
-            // Return the word
-            if start < char_num || end > char_num {
-                return chars[start..end].iter().collect();
+                // Then re-collect
+                self.ctx.collect_identifiers(&content, &Some(tree.clone()), &uri);
             }
         }
-        String::new()
-    }
-}
-
-/// Quickly determine if an ASCII character is a word character (using lookup table)
-const fn is_ascii_word_char(c: u8) -> bool {
-    matches!(c,
-        b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'=' |
-        b'-' | b'?' | b'!' | b'_' | b'&' | b'*' | b'~' | b'|' | b'^' | b'+'
-    )
-}
-
-#[inline]
-fn is_word_char(c: char) -> bool {
-    // Use fast lookup table for ASCII paths
-    if c.is_ascii() {
-        is_ascii_word_char(c as u8)
-    } else {
-        // Use is_alphanumeric for non-ASCII characters (Unicode)
-        c.is_alphanumeric()
     }
 }
 
@@ -1383,22 +1271,4 @@ fn position_to_offset_rope(rope: &Rope, position: Position) -> usize {
     let char_offset = char_offset.min(rope.len_chars());
 
     rope.char_to_byte(char_offset)
-}
-
-/// Convert byte offset to (line, column) position
-fn offset_to_position(rope: &Rope, byte_offset: usize) -> Position {
-    // Ropey gives us a way to map byte offsets to character indices
-    let char_idx = rope.byte_to_char(byte_offset);
-
-    // Get the line number containing this character
-    let line = rope.char_to_line(char_idx);
-
-    // Get the character offset within that line
-    let line_start = rope.line_to_char(line);
-    let column = char_idx - line_start;
-
-    Position {
-        line: line as u32,
-        character: column as u32,
-    }
 }
