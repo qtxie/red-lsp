@@ -45,7 +45,7 @@ impl From<String> for NormalizedName {
 
 impl std::ops::Deref for NormalizedName {
     type Target = str;
-    
+
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -55,6 +55,13 @@ impl std::ops::Deref for NormalizedName {
 impl std::borrow::Borrow<str> for NormalizedName {
     #[inline]
     fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<String> for NormalizedName {
+    #[inline]
+    fn borrow(&self) -> &String {
         &self.0
     }
 }
@@ -100,8 +107,8 @@ pub struct ObjectMember {
     pub spec_content: Option<String>,
     /// Byte range of member definition (start, end)
     pub byte_range: Option<(usize, usize)>,
-    /// File path where member is defined
-    pub file_path: Option<String>,
+    /// Object path (scope_path) where member is defined
+    pub object_path: Option<String>,
 }
 
 /// Object node, represents a context object
@@ -124,10 +131,15 @@ impl ObjectNode {
             ..Default::default()
         }
     }
-    
+
     /// Get member with case-insensitive lookup
     pub fn get_member(&self, name: &str) -> Option<ObjectMember> {
         self.members.get(name)
+    }
+
+    /// Check if object has a member with the given name
+    pub fn has_member(&self, name: &str) -> bool {
+        self.members.contains_key(name)
     }
 }
 
@@ -159,6 +171,32 @@ impl ObjectGraph {
 
     pub fn get(&self, path: &str) -> Option<&Rc<RefCell<ObjectNode>>> {
         self.objects.get(path)
+    }
+
+    /// Find a member function by name across all objects
+    pub fn find_function(&self, name: &str) -> Option<ObjectMember> {
+        // Search all objects for a member with the given name
+        for (_, obj) in &self.objects {
+            if let Some(member) = obj.borrow().get_member(name) {
+                if member.member_type == MemberType::Function {
+                    return Some(member);
+                }
+            }
+        }
+        None
+    }
+
+    /// Get a function member from a specific object path
+    pub fn get_function_from_object(&self, name: &str, object_path: &str) -> Option<ObjectMember> {
+        // Get the object directly using object_path
+        if let Some(obj) = self.objects.get(object_path) {
+            if let Some(member) = obj.borrow().get_member(name) {
+                if member.member_type == MemberType::Function {
+                    return Some(member);
+                }
+            }
+        }
+        None
     }
 
     /// Add object
@@ -270,12 +308,12 @@ impl ObjectGraph {
         // Use normalized name for case-insensitive lookup
         let normalized_name = NormalizedName::from(child_name);
         let scope_path = format!("{}/{}", parent_scope.borrow().scope_path, child_name);
-        
+
         // First try exact match
         if let Some(obj) = self.objects.get(&scope_path) {
             return Some(obj);
         }
-        
+
         // Try case-insensitive lookup via name_to_scopes
         if let Some(scopes) = self.name_to_scopes.get(&normalized_name) {
             let parent_path = &parent_scope.borrow().scope_path;
@@ -292,7 +330,7 @@ impl ObjectGraph {
                 }
             }
         }
-        
+
         None
     }
 }
@@ -386,7 +424,7 @@ impl Ctx {
                                 member_type: MemberType::Value,
                                 spec_content: None,
                                 byte_range: Some((node.start_byte(), node.end_byte())),
-                                file_path: None
+                                object_path: None
                             });
                         }
                     }
@@ -506,6 +544,7 @@ log::info!("find scopes: {:?}", scopes);
 
     /// Get object member completions
     pub fn get_object_completions(&self, object_path: &str, current_byte_pos: usize, prefix: &str, file_uri: &Uri) -> Vec<ObjectMember> {
+        log::info!("get_object_completions: {} - {}", object_path, prefix);
         // First search from object_graph
         let file_path = file_uri.to_string();
         let results = self.find_members(object_path, current_byte_pos, prefix, &file_path);
@@ -534,23 +573,78 @@ log::info!("find scopes: {:?}", scopes);
         Vec::new()
     }
 
-    fn is_any_func(t: MemberType) -> bool {
-        t == MemberType::Action || t == MemberType::Function || t == MemberType::Native
+    pub fn get_symbol_completions(&self, current_byte_pos: usize, prefix: &str, file_uri: &Uri) -> Vec<ObjectMember> {
+        let mut result = Vec::new();
+        // First search from object_graph
+        let file_path = file_uri.to_string();
+        // First find the current scope at the cursor position
+        let scopes = self.object_graph.find_scopes_at_position(current_byte_pos, &file_path);
+        // Try to resolve object path from the current scope
+        for scope in &scopes {
+            match self.get_members_or_refiments("", prefix, scope) {
+                Some(mut results) => result.append(&mut results),
+                None => continue,
+            }
+        }
+
+        // Search from document's root_object
+        if let Some(document) = self.documents.get(file_uri) {
+            let root_obj = document.root_object.clone();
+            let obj_ref = root_obj.borrow();
+            if let Some(obj) = &obj_ref.include_obj {
+                let mut results : Vec<ObjectMember> = if prefix.is_empty() {
+                    obj.borrow().members.values()
+                } else {
+                    obj.borrow().members.find_by_prefix(prefix)
+                };
+                result.append(&mut results);
+            } else {
+                let mut results : Vec<ObjectMember> = if prefix.is_empty() {
+                    obj_ref.members.values()
+                } else {
+                    obj_ref.members.find_by_prefix(prefix)
+                };
+                result.append(&mut results);
+            }
+        }
+
+        // Search from builtin_ctx
+        log::info!("get from builtin");
+        let builtin = self.builtin_ctx.clone();
+        let obj_ref = builtin.borrow();
+        if let Some(obj) = &obj_ref.include_obj {
+            let mut results : Vec<ObjectMember> = if prefix.is_empty() {
+                obj.borrow().members.values()
+            } else {
+                obj.borrow().members.find_by_prefix(prefix)
+            };
+            result.append(&mut results);
+        } else {
+            let mut results : Vec<ObjectMember> = if prefix.is_empty() {
+                obj_ref.members.values()
+            } else {
+                obj_ref.members.find_by_prefix(prefix)
+            };
+            result.append(&mut results);
+        }
+
+        result
     }
+
     /// Get member completions from the specified object
     fn get_members_from_object(&self, object_path: &str, prefix: &str, root_object: &Rc<RefCell<ObjectNode>>) -> Option<Vec<ObjectMember>> {
         let parts: Vec<&str> = object_path.split('/').filter(|s| !s.is_empty()).collect();
-        if let Some(name) = parts.first() {
-            if root_object.borrow().members.contains_key(name) {
-                if let Some(results) = self.get_members_or_refiments(object_path, prefix, root_object) {
-                   return Some(results);
-                } else {
-                    // try to find it in root_object
-                    log::info!("finding it in root");
-                    if let Some(member) = root_object.borrow().get_member(name) {
-                        if Self::is_any_func(member.member_type.clone()) {
-                            return self.get_refinements_from_member(&member);
-                        }
+        let name = parts.first().unwrap_or(&prefix);
+        let ctx = root_object.borrow().include_obj.clone().unwrap_or_else(|| root_object.clone());
+        if ctx.borrow().members.contains_key(name) {
+            if let Some(results) = self.get_members_or_refiments(object_path, prefix, &ctx) {
+                return Some(results);
+            } else {
+                // try to find it in root_object
+                log::info!("finding it in root");
+                if let Some(member) = ctx.borrow().get_member(name) {
+                    if is_any_func(member.member_type.clone()) {
+                        return self.get_refinements_from_member(&member);
                     }
                 }
             }
@@ -562,7 +656,7 @@ log::info!("find scopes: {:?}", scopes);
         log::info!("get_members_or: {} -- {}", object_path, scope.borrow().scope_path);
         let (obj, is_found, word) = self.object_graph.resolve_object_path(object_path, scope);
         log::info!("is found?: {}", is_found);
-        if is_found {
+        if is_found || word.is_none() {
             let obj_ref = obj.borrow();
             if let Some(obj) = &obj_ref.include_obj {
                 let results : Vec<ObjectMember> = if prefix.is_empty() {
@@ -587,13 +681,13 @@ log::info!("find scopes: {:?}", scopes);
                 if let Some(inc_obj) = &obj_ref.include_obj {
                     let inc_obj_ref = inc_obj.borrow();
                     if let Some(member) = inc_obj_ref.get_member(&part) {
-                        if Self::is_any_func(member.member_type.clone()) {
+                        if is_any_func(member.member_type.clone()) {
                             return self.get_refinements_from_member(&member);
                         }
                     }
                 } else {
                     if let Some(member) = obj_ref.get_member(&part) {
-                        if Self::is_any_func(member.member_type.clone()) {
+                        if is_any_func(member.member_type.clone()) {
                             return self.get_refinements_from_member(&member);
                         }
                     }
@@ -1071,7 +1165,7 @@ log::info!("find scopes: {:?}", scopes);
                 let node_start = node.start_byte();
                 let node_end = node.end_byte();
 
-                // Insert with case-insensitive key
+                // Insert with case-insensitive key, store object_path for fast lookup in resolve
                 scope.members.insert(
                     &member_name,
                     ObjectMember {
@@ -1079,7 +1173,7 @@ log::info!("find scopes: {:?}", scopes);
                         member_type,
                         spec_content,
                         byte_range: Some((node_start, node_end)),
-                        file_path: Some(uri.to_string())
+                        object_path: Some(scope.scope_path.clone())
                     }
                 );
             }
@@ -1323,7 +1417,7 @@ impl Symbol {
             _ => {}
         }
     }
-    
+
     /// Get the original word from the symbol
     fn get_word(&self, key: &str) -> String {
         match self {
@@ -1383,12 +1477,12 @@ impl Symbols {
         }
         results
     }
-    
+
     /// Get all values (returns original words)
     pub fn values(&self) -> Vec<String> {
         self.map.iter().map(|(k, s)| s.get_word(&k)).collect()
     }
-    
+
     /// Clear all entries
     pub fn clear(&mut self) {
         self.map.clear();
@@ -1449,17 +1543,17 @@ impl<T: Clone> SymbolsMap<T> {
             .map(|(_, (_, v))| v.clone())
             .collect()
     }
-    
+
     /// Get all values
     pub fn values(&self) -> Vec<T> {
         self.map.values().map(|(_, v)| v.clone()).collect()
     }
-    
+
     /// Iterate over all entries, returning (original_word, value) pairs
     pub fn iter(&self) -> Vec<(String, T)> {
         self.map.iter().map(|(k, (s, v))| (s.get_word(&k), v.clone())).collect()
     }
-    
+
     /// Clear all entries
     pub fn clear(&mut self) {
         self.map.clear();
@@ -1503,4 +1597,8 @@ fn encode_semantic_tokens(tokens: Vec<(u32, u32, u32, u32, u32)>) -> Vec<Semanti
     }
 
     result
+}
+
+pub fn is_any_func(t: MemberType) -> bool {
+    t == MemberType::Action || t == MemberType::Function || t == MemberType::Native
 }
