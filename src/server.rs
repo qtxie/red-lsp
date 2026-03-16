@@ -477,7 +477,6 @@ impl RedLanguageServer {
             return String::new();
         };
 
-        let source_code = document.content.to_string();
         let root = tree.root_node();
 
         // Use descendant_for_byte_range to find the node containing the cursor position
@@ -488,8 +487,8 @@ impl RedLanguageServer {
 
                 log::info!("node at {}: kind={}, kind_id={}", byte_pos, kind, kind_id);
 
-                // Get node text
-                let text = Self::get_node_text(&source_code, &node)?;
+                // Get node text directly from rope
+                let text = Self::get_node_text_from_rope(&document.content, &node)?;
 
                 // Return based on node type
                 match kind {
@@ -499,7 +498,7 @@ impl RedLanguageServer {
                     }
                     "word" | "path_start" | "get_word" => {
                         if let Some(parent) = node.parent() && parent.kind() == "path" {
-                            self.extract_path_to_cursor(Self::get_node_text(&source_code, &parent)?, byte_pos - parent.start_byte())
+                            self.extract_path_to_cursor(&Self::get_node_text_from_rope(&document.content, &parent)?, byte_pos - parent.start_byte())
                         } else {
                             Some(text.to_string())
                         }
@@ -520,6 +519,20 @@ impl RedLanguageServer {
 
         if start_byte <= source_code.len() && end_byte <= source_code.len() && start_byte <= end_byte {
             Some(&source_code[start_byte..end_byte])
+        } else {
+            None
+        }
+    }
+
+    /// Get node text directly from a Rope without converting to String
+    fn get_node_text_from_rope(rope: &Rope, node: &tree_sitter::Node) -> Option<String> {
+        let start_byte = node.start_byte();
+        let end_byte = node.end_byte();
+
+        if start_byte <= rope.len_bytes() && end_byte <= rope.len_bytes() && start_byte <= end_byte {
+            let start_char = rope.byte_to_char(start_byte);
+            let end_char = rope.byte_to_char(end_byte);
+            Some(rope.slice(start_char..end_char).to_string())
         } else {
             None
         }
@@ -844,7 +857,6 @@ impl RedLanguageServer {
             return CompletionType::None;
         };
 
-        let source_code = document.content.to_string();
         let root = tree.root_node();
 
         // Find the node containing the cursor position
@@ -852,21 +864,21 @@ impl RedLanguageServer {
             let kind = node.kind();
             log::info!("completion at {}: kind={}", byte_pos, kind);
 
-            // Get node text
-            if let Some(text) = Self::get_node_text(&source_code, &node) {
+            // Get node text directly from rope
+            if let Some(text) = Self::get_node_text_from_rope(&document.content, &node) {
                 log::info!("completion text {}", text);
                 match kind {
                     "file" => {
                         // File path completion
-                        return CompletionType::FilePath(text.to_string());
+                        return CompletionType::FilePath(text);
                     }
                     "word" | "path_start" | "get_word" => {
                         if let Some(parent) = node.parent() && parent.kind() == "path" {
                             let cursor_offset = byte_pos - parent.start_byte();
-                            return self.get_object_path_completion(Self::get_node_text(&source_code, &parent).unwrap(), cursor_offset);
+                            return self.get_object_path_completion(&Self::get_node_text_from_rope(&document.content, &parent).unwrap(), cursor_offset);
                         } else {
                             // Regular symbol completion
-                            return CompletionType::Symbol(text.to_string());
+                            return CompletionType::Symbol(text);
                         }
                     }
                     "/" => {
@@ -919,7 +931,7 @@ impl RedLanguageServer {
             .unwrap_or(0);
 
         let token = &before_cursor[token_start..];
-log::info!("fallback... {}", token);
+
         if token.starts_with('%') {
             return CompletionType::FilePath(token.to_string());
         }
@@ -1103,7 +1115,7 @@ log::info!("fallback... {}", token);
 
         // Re-run collect_identifiers to update symbols
         if let Some(document) = self.ctx.documents.get(&uri) {
-            let content = document.content.to_string();
+            let content = params.text.unwrap_or(document.content.to_string());
             if let Some(tree) = &document.tree {
                 // Re-collect identifiers and update object graph
                 // First remove old objects from this file

@@ -469,6 +469,21 @@ fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&
     }
 }
 
+/// Get node text directly from a Rope without converting to String
+fn get_node_text_from_rope(rope: &Rope, node: &tree_sitter::Node) -> Option<String> {
+    let start_byte = node.start_byte();
+    let end_byte = node.end_byte();
+
+    if start_byte <= rope.len_bytes() && end_byte <= rope.len_bytes() && start_byte <= end_byte {
+        // Convert byte range to char range for Rope
+        let start_char = rope.byte_to_char(start_byte);
+        let end_char = rope.byte_to_char(end_byte);
+        Some(rope.slice(start_char..end_char).to_string())
+    } else {
+        None
+    }
+}
+
 impl Ctx {
     /// Get path completion suggestions (read from file system in real-time)
     pub fn get_path_completions(&self, prefix: &str, file_uri: &Uri) -> Vec<PathCompletionItem> {
