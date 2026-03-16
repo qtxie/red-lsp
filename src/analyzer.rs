@@ -2,7 +2,7 @@ use hashbrown::{HashMap, HashSet};
 use lsp_types::{SemanticToken, Uri};
 use ropey::Rope;
 use tree_sitter::{Tree, TreeCursor};
-use compact_str::CompactString;
+use compact_str::{CompactString, ToCompactString};
 use fast_radix_trie::StringRadixMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -96,6 +96,19 @@ pub enum MemberType {
     Native,
     Action,
     Routine,
+}
+
+impl MemberType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            MemberType::Value    => "value",
+            MemberType::Function => "func",
+            MemberType::Object   => "obj",
+            MemberType::Native   => "native",
+            MemberType::Action   => "action",
+            MemberType::Routine  => "routine",
+        }
+    }
 }
 
 /// Object member - uses CompactString for name storage
@@ -573,8 +586,32 @@ log::info!("find scopes: {:?}", scopes);
         Vec::new()
     }
 
+    /// Collect members from an object or its included object
+    fn collect_members_from_object(&self, obj_ref: &ObjectNode, prefix: &str, result: &mut Vec<ObjectMember>, seen_names: &mut HashSet<CompactString>) {
+        let results : Vec<ObjectMember> = if prefix.is_empty() {
+            if let Some(obj) = &obj_ref.include_obj {
+                obj.borrow().members.values()
+            } else {
+                obj_ref.members.values()
+            }
+        } else {
+            if let Some(obj) = &obj_ref.include_obj {
+                obj.borrow().members.find_by_prefix(prefix)
+            } else {
+                obj_ref.members.find_by_prefix(prefix)
+            }
+        };
+        for member in results {
+            if seen_names.insert(member.name.clone()) {
+                result.push(member);
+            }
+        }
+    }
+
     pub fn get_symbol_completions(&self, current_byte_pos: usize, prefix: &str, file_uri: &Uri) -> Vec<ObjectMember> {
         let mut result = Vec::new();
+        let mut seen_names = HashSet::new();
+
         // First search from object_graph
         let file_path = file_uri.to_string();
         // First find the current scope at the cursor position
@@ -582,7 +619,13 @@ log::info!("find scopes: {:?}", scopes);
         // Try to resolve object path from the current scope
         for scope in &scopes {
             match self.get_members_or_refiments("", prefix, scope) {
-                Some(mut results) => result.append(&mut results),
+                Some(results) => {
+                    for member in results {
+                        if seen_names.insert(member.name.clone()) {
+                            result.push(member);
+                        }
+                    }
+                },
                 None => continue,
             }
         }
@@ -590,44 +633,28 @@ log::info!("find scopes: {:?}", scopes);
         // Search from document's root_object
         if let Some(document) = self.documents.get(file_uri) {
             let root_obj = document.root_object.clone();
-            let obj_ref = root_obj.borrow();
-            if let Some(obj) = &obj_ref.include_obj {
-                let mut results : Vec<ObjectMember> = if prefix.is_empty() {
-                    obj.borrow().members.values()
-                } else {
-                    obj.borrow().members.find_by_prefix(prefix)
-                };
-                result.append(&mut results);
-            } else {
-                let mut results : Vec<ObjectMember> = if prefix.is_empty() {
-                    obj_ref.members.values()
-                } else {
-                    obj_ref.members.find_by_prefix(prefix)
-                };
-                result.append(&mut results);
-            }
+            self.collect_members_from_object(&root_obj.borrow(), prefix, &mut result, &mut seen_names);
         }
 
         // Search from builtin_ctx
         log::info!("get from builtin");
         let builtin = self.builtin_ctx.clone();
-        let obj_ref = builtin.borrow();
-        if let Some(obj) = &obj_ref.include_obj {
-            let mut results : Vec<ObjectMember> = if prefix.is_empty() {
-                obj.borrow().members.values()
-            } else {
-                obj.borrow().members.find_by_prefix(prefix)
-            };
-            result.append(&mut results);
-        } else {
-            let mut results : Vec<ObjectMember> = if prefix.is_empty() {
-                obj_ref.members.values()
-            } else {
-                obj_ref.members.find_by_prefix(prefix)
-            };
-            result.append(&mut results);
-        }
+        self.collect_members_from_object(&builtin.borrow(), prefix, &mut result, &mut seen_names);
 
+        // search from symbols
+        let symbols = self.symbols.find_by_prefix(prefix);
+        for symbol in symbols {
+            if seen_names.insert(symbol.to_compact_string()) {
+                result.push(
+                    ObjectMember {
+                        name: symbol.to_compact_string(),
+                        member_type: MemberType::Value,
+                        spec_content: None,
+                        byte_range: None,
+                        object_path: None
+                    });
+            }
+        }
         result
     }
 
@@ -1600,5 +1627,5 @@ fn encode_semantic_tokens(tokens: Vec<(u32, u32, u32, u32, u32)>) -> Vec<Semanti
 }
 
 pub fn is_any_func(t: MemberType) -> bool {
-    t == MemberType::Action || t == MemberType::Function || t == MemberType::Native
+    t == MemberType::Action || t == MemberType::Function || t == MemberType::Native || t == MemberType::Routine
 }

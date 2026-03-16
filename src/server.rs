@@ -630,7 +630,6 @@ impl RedLanguageServer {
                 } else {
                     let members = self.ctx.get_symbol_completions(byte_pos, &prefix, uri);
                     let items = get_object_completion_items(&members);
-                    //let items = get_red_completions(&self.ctx, &symbols);
                     Some(lsp_types::CompletionResponse::Array(items))
                 }
             }
@@ -657,26 +656,26 @@ impl RedLanguageServer {
             return Some(item);
         };
 
-        let member_type = data.get("member_type").and_then(|v| v.as_str()).unwrap_or("Function");
+        let member_type = data.get("type").and_then(|v| v.as_str()).unwrap_or("Function");
         log::info!("resolve: {} (type: {})", name, member_type);
 
         // Only fetch documentation for functions
-        if member_type == "Function" {
+        if member_type == "func" || member_type == "native" || member_type == "action" || member_type == "routine" {
             // Get object_path from data if available (from object member completion)
-            let object_path = data.get("object_path").and_then(|v| v.as_str());
+            let object_path = data.get("path").and_then(|v| v.as_str());
 
             // Search in object_graph using object_path for fast O(1) lookup
             if let Some(opath) = object_path {
                 if let Some(member) = self.ctx.object_graph.get_function_from_object(name, opath) {
                     if let Some(spec) = &member.spec_content {
-                        let doc = format!("```red\nfunc [\n{}\n]\n```", Self::pretty_spec(spec));
+                        let doc = format!("```red\n{} [\n{}\n]\n```", member_type,  Self::pretty_spec(spec));
                         item.documentation = Some(lsp_types::Documentation::MarkupContent(
                             lsp_types::MarkupContent {
                                 kind: lsp_types::MarkupKind::Markdown,
                                 value: doc,
                             }
                         ));
-                        item.detail = Some(format!("func [...]"));
+                        item.detail = Some(format!("{} {}", member_type, Self::format_detail_spec(spec)));
                         log::info!("resolved function {} from object {} with spec", name, opath);
                         return Some(item);
                     }
@@ -686,14 +685,14 @@ impl RedLanguageServer {
             // Fallback: search in all objects (for symbol completions without object_path)
             if let Some(member) = self.ctx.object_graph.find_function(name) {
                 if let Some(spec) = &member.spec_content {
-                    let doc = format!("```red\nfunc [\n{}\n]\n```", Self::pretty_spec(spec));
+                    let doc = format!("```red\n{} [\n{}\n]\n```", member_type, Self::pretty_spec(spec));
                     item.documentation = Some(lsp_types::Documentation::MarkupContent(
                         lsp_types::MarkupContent {
                             kind: lsp_types::MarkupKind::Markdown,
                             value: doc,
                         }
                     ));
-                    item.detail = Some(format!("func [...]"));
+                    item.detail = Some(format!("{} {}", member_type, Self::format_detail_spec(spec)));
                     log::info!("resolved function {} with spec (fallback)", name);
                     return Some(item);
                 }
@@ -702,14 +701,14 @@ impl RedLanguageServer {
             // Search in builtin_ctx
             if let Some(member) = self.ctx.builtin_ctx.borrow().get_member(name) {
                 if let Some(spec) = &member.spec_content {
-                    let doc = format!("```red\nfunc [\n{}\n]\n```", Self::pretty_spec(spec));
+                    let doc = format!("```red\n{} [\n{}\n]\n```", member_type, Self::pretty_spec(spec));
                     item.documentation = Some(lsp_types::Documentation::MarkupContent(
                         lsp_types::MarkupContent {
                             kind: lsp_types::MarkupKind::Markdown,
                             value: doc,
                         }
                     ));
-                    item.detail = Some(format!("func [...]"));
+                    item.detail = Some(format!("{} {}", member_type, Self::format_detail_spec(spec)));
                     log::info!("resolved builtin function {} with spec", name);
                     return Some(item);
                 }
@@ -761,57 +760,43 @@ impl RedLanguageServer {
     /// Format spec for item.detail: show only params, refinements and return type
     /// Example: [a b /ref return: integer!]
     fn format_detail_spec(spec: &str) -> String {
-        let mut params = Vec::new();
-        let mut refinements = Vec::new();
-        let mut return_type = None;
+        let mut tokens = Vec::new();
+        let mut in_brace = false;
+        let mut in_quote = false;
 
-        for line in spec.lines() {
-            let trimmed = line.trim();
-
-            // Skip empty lines
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            // Handle /local - skip everything after it
-            if trimmed.starts_with("/local") {
+        for tok in spec.split_whitespace() {
+            // Stop completely once we hit /local
+            if tok == "/local" {
                 break;
             }
 
-            // Parse return type
-            if trimmed.starts_with("return:") {
-                return_type = Some(trimmed.trim_start_matches("return:").trim().to_string());
+            if tok.starts_with('{') {
+                in_brace = true;
+                continue;
+            }
+            if tok.starts_with('"') {
+                in_quote = true;
                 continue;
             }
 
-            // Parse refinement
-            if trimmed.starts_with('/') {
-                refinements.push(trimmed.to_string());
+            if in_brace {
+                if tok.ends_with('}') {
+                    in_brace = false;
+                }
                 continue;
             }
 
-            // Regular parameter
-            params.push(trimmed.to_string());
+            if in_quote {
+                if tok.ends_with('"') {
+                    in_quote = false;
+                }
+                continue;
+            }
+
+            tokens.push(tok);
         }
 
-        // Build the detail string
-        let mut result = String::from("[");
-        let mut parts = Vec::new();
-
-        // Add parameters
-        parts.extend(params);
-
-        // Add refinements
-        parts.extend(refinements);
-
-        // Add return type at the end
-        if let Some(ret) = return_type {
-            parts.push(ret);
-        }
-
-        result.push_str(&parts.join(" "));
-        result.push(']');
-        result
+        format!("[{}]", tokens.join(" "))
     }
 
     /// Get completion type from syntax tree at cursor position
@@ -1097,68 +1082,6 @@ log::info!("fallback... {}", token);
     }
 }
 
-fn get_red_completions(ctx: &Ctx, symbols: &[String]) -> Vec<lsp_types::CompletionItem> {
-    symbols
-        .iter()
-        .map(|word| {
-            // Set sortText to prioritize ! and ? suffixes
-            // Lower hex values appear first in completion list
-            let sort_text = if word.ends_with('!') {
-                "00000000".to_string()
-            } else if word.ends_with('?') {
-                "7fffffff".to_string()
-            } else {
-                "80000000".to_string()
-            };
-
-            // Determine the symbol type using functions set and name_to_scopes
-            let (kind, member_type) = if ctx.functions.contains(word.as_str()) {
-                // It's a function - store data for resolve
-                (lsp_types::CompletionItemKind::FUNCTION, "Function")
-            } else if ctx.object_graph.name_to_scopes.contains_key(word.as_str()) {
-                // It's an object/context - no data needed
-                (lsp_types::CompletionItemKind::CLASS, "Object")
-            } else {
-                // It's a regular symbol/variable - no data needed
-                (lsp_types::CompletionItemKind::VARIABLE, "Value")
-            };
-
-            // Only store data for functions - used for resolve to lookup spec_content
-            // Objects and Values don't need resolve, so data is None
-            let data = if member_type == "Function" {
-                Some(serde_json::json!({
-                    "name": word.to_string(),
-                    "member_type": "Function"
-                }))
-            } else {
-                None
-            };
-
-            lsp_types::CompletionItem {
-                label: word.to_string(),
-                kind: Some(kind),
-                sort_text: Some(sort_text),
-                data,
-                // Don't send detail in initial response - loaded in resolve phase
-                detail: None,
-                documentation: None,
-                label_details: None,
-                deprecated: None,
-                preselect: None,
-                filter_text: None,
-                insert_text: None,
-                insert_text_format: None,
-                insert_text_mode: None,
-                text_edit: None,
-                additional_text_edits: None,
-                command: None,
-                commit_characters: None,
-                tags: None,
-            }
-        })
-        .collect()
-}
-
 /// Convert path completion items to LSP completion items
 /// Path completions don't need sort_text or data - they are simple file/folder names
 fn get_path_completion_items(completions: &Vec<analyzer::PathCompletionItem>) -> Vec<lsp_types::CompletionItem> {
@@ -1221,11 +1144,11 @@ fn get_object_completion_items(members: &Vec<analyzer::ObjectMember>) -> Vec<lsp
             // Set sortText to prioritize ! and ? suffixes
             // Lower hex values appear first in completion list
             let sort_text = if member.name.ends_with('!') {
-                "00000000".to_string()
-            } else if member.name.ends_with('?') {
-                "7fffffff".to_string()
-            } else {
                 "80000000".to_string()
+            } else if member.name.ends_with('?') {
+                "80000001".to_string()
+            } else {
+                "80000002".to_string()
             };
 
             // Only store data for functions - used for resolve to lookup spec_content
@@ -1233,8 +1156,8 @@ fn get_object_completion_items(members: &Vec<analyzer::ObjectMember>) -> Vec<lsp
             let data = if analyzer::is_any_func(member.member_type.clone()) {
                 Some(serde_json::json!({
                     "name": member.name.to_string(),
-                    "member_type": "Function",
-                    "object_path": member.object_path
+                    "type": member.member_type.as_str(),
+                    "path": member.object_path
                 }))
             } else {
                 None
