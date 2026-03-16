@@ -11,7 +11,7 @@ use std::str::FromStr;
 use url::Url;
 
 use crate::analyzer;
-use crate::analyzer::Ctx;
+use crate::analyzer::MemberType;
 
 #[derive(Embed)]
 #[folder = "data/"]
@@ -668,7 +668,7 @@ impl RedLanguageServer {
             if let Some(opath) = object_path {
                 if let Some(member) = self.ctx.object_graph.get_function_from_object(name, opath) {
                     if let Some(spec) = &member.spec_content {
-                        let doc = format!("```red\n{} [\n{}\n]\n```", member_type,  Self::pretty_spec(spec));
+                        let doc = format!("{}",  Self::pretty_spec(name, spec));
                         item.documentation = Some(lsp_types::Documentation::MarkupContent(
                             lsp_types::MarkupContent {
                                 kind: lsp_types::MarkupKind::Markdown,
@@ -685,7 +685,7 @@ impl RedLanguageServer {
             // Fallback: search in all objects (for symbol completions without object_path)
             if let Some(member) = self.ctx.object_graph.find_function(name) {
                 if let Some(spec) = &member.spec_content {
-                    let doc = format!("```red\n{} [\n{}\n]\n```", member_type, Self::pretty_spec(spec));
+                    let doc = format!("{}", Self::pretty_spec(name, spec));
                     item.documentation = Some(lsp_types::Documentation::MarkupContent(
                         lsp_types::MarkupContent {
                             kind: lsp_types::MarkupKind::Markdown,
@@ -701,7 +701,7 @@ impl RedLanguageServer {
             // Search in builtin_ctx
             if let Some(member) = self.ctx.builtin_ctx.borrow().get_member(name) {
                 if let Some(spec) = &member.spec_content {
-                    let doc = format!("```red\n{} [\n{}\n]\n```", member_type, Self::pretty_spec(spec));
+                    let doc = format!("{}", Self::pretty_spec(name, spec));
                     item.documentation = Some(lsp_types::Documentation::MarkupContent(
                         lsp_types::MarkupContent {
                             kind: lsp_types::MarkupKind::Markdown,
@@ -719,42 +719,77 @@ impl RedLanguageServer {
         Some(item)
     }
 
-    /// Pretty print spec_content for documentation: remove leading spaces and /local refinements
-    fn pretty_spec(spec: &str) -> String {
-        let mut result = Vec::new();
-        let mut skip_local = false;
+    fn align_columns(items: &[(&str, &str)]) -> String {
+        let max_len = items.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
+        items.iter()
+            .map(|(name, ty)| format!("  {:<width$} {}", name, ty, width = max_len))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 
-        for line in spec.lines() {
+    fn pretty_spec(func_name: &str, input: &str) -> String {
+        let mut description = "";
+        let mut arguments = Vec::new();
+        let mut refinements = Vec::new();
+        let mut returns = "";
+        let mut usage = vec![func_name];
+
+        let mut current_refine: Option<&str> = None;
+
+        for line in input.lines() {
             let trimmed = line.trim();
+            if trimmed.is_empty() { continue; }
 
-            // Skip empty lines
-            if trimmed.is_empty() {
+            if trimmed.starts_with('{') && trimmed.ends_with('}') {
+                description = trimmed.trim_matches(|c| c == '{' || c == '}');
                 continue;
             }
 
-            // Start skipping when we see /local
-            if trimmed.starts_with("/local") {
-                skip_local = true;
+            if trimmed.starts_with("return:") {
+                returns = trimmed["return:".len()..].trim();
                 continue;
             }
 
-            // Skip lines while in local block (lines that are more indented)
-            if skip_local {
-                // Check if this line is less indented than typical local vars
-                // Local vars usually have more indentation, function params have less
-                let leading_spaces = line.len() - line.trim_start().len();
-                if leading_spaces <= 4 {
-                    skip_local = false;
+            if trimmed.starts_with('/') {
+                if let Some(idx) = trimmed.find('"') {
+                    let refine = trimmed[..idx].trim();
+                    let doc = trimmed[idx..].trim().trim_matches('"');
+                    refinements.push(format!("  {} => {}", refine, doc));
+                    current_refine = Some(refine);
+                } else if let Some(idx) = trimmed.find('{') {
+                    let refine = trimmed[..idx].trim();
+                    let doc = trimmed[idx..].trim().trim_matches(|c| c == '{' || c == '}');
+                    refinements.push(format!("  {} => {}", refine, doc));
+                    current_refine = Some(refine);
                 } else {
-                    continue;
+                    refinements.push(format!("  {}", trimmed));
+                    current_refine = Some(trimmed);
+                }
+                continue;
+            }
+
+            if current_refine.is_some() {
+                // sub‑argument under refinement: indent 4 spaces total (2 + 2)
+                refinements.push(format!("    {}", trimmed));
+                current_refine = None;
+            } else {
+                if let Some(idx) = trimmed.find('[') {
+                    let name = trimmed[..idx].trim();
+                    let ty = trimmed[idx..].trim();
+                    arguments.push((name, ty));
+                    usage.push(&name);
                 }
             }
-
-            // Add line with 2-space indent
-            result.push(format!("  {}", trimmed));
         }
 
-        result.join("\n")
+        format!(
+            "{}\n\n---\n\n```red\nUSAGE:\n  {}\n\nARGUMENTS:\n{}\n\nREFINEMENTS:\n{}\n\nRETURNS:\n  {}\n```",
+            description,
+            usage.join(" "),
+            Self::align_columns(&arguments),
+            refinements.join("\n"),
+            returns
+        )
     }
 
     /// Format spec for item.detail: show only params, refinements and return type
@@ -1135,10 +1170,10 @@ fn get_object_completion_items(members: &Vec<analyzer::ObjectMember>) -> Vec<lsp
         .iter()
         .map(|member| {
             let kind = match member.member_type {
-                analyzer::MemberType::Function => lsp_types::CompletionItemKind::METHOD,
-                analyzer::MemberType::Object => lsp_types::CompletionItemKind::CLASS,
-                analyzer::MemberType::Value => lsp_types::CompletionItemKind::VALUE,
-                _ => lsp_types::CompletionItemKind::VARIABLE,
+                MemberType::Function | MemberType::Routine => lsp_types::CompletionItemKind::FUNCTION,
+                MemberType::Action | MemberType::Native => lsp_types::CompletionItemKind::KEYWORD,
+                MemberType::Object => lsp_types::CompletionItemKind::CLASS,
+                MemberType::Value => lsp_types::CompletionItemKind::VALUE,
             };
 
             // Set sortText to prioritize ! and ? suffixes

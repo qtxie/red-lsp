@@ -286,6 +286,7 @@ impl ObjectGraph {
     pub fn resolve_object_path(&self, path: &str, current_scope: &Rc<RefCell<ObjectNode>>) -> (Rc<RefCell<ObjectNode>>, bool, Option<String>) {
         // Split the path into parts
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+        log::info!("resolve_object_path, parts {:?}", parts);
         if parts.is_empty() {
             return (current_scope.clone(), false, None);
         }
@@ -321,7 +322,7 @@ impl ObjectGraph {
         // Use normalized name for case-insensitive lookup
         let normalized_name = NormalizedName::from(child_name);
         let scope_path = format!("{}/{}", parent_scope.borrow().scope_path, child_name);
-
+log::info!("find_child_obj scope_path {}", scope_path);
         // First try exact match
         if let Some(obj) = self.objects.get(&scope_path) {
             return Some(obj);
@@ -529,6 +530,7 @@ log::info!("find scopes: {:?}", scopes);
         for scope in &scopes {
             let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, scope);
             let obj = obj.borrow().include_obj.clone().unwrap_or_else(|| obj.clone());
+            log::info!("find_obj find? : {}", is_found);
             if is_found {
                 let member = member_name.and_then(|name| {
                     obj.as_ref().borrow().get_member(&name)
@@ -536,20 +538,25 @@ log::info!("find scopes: {:?}", scopes);
                 return (Some(obj.clone()), member);
             } else {
                 if let Some(member) = obj.borrow().get_member(word) {
+                    log::info!("find_obj find member: {}", word);
                    return (None, Some(member));
                 }
             }
         }
+
         // Search from document's root_object
+        log::info!("find_obj current file");
         if let Some(uri) = &self.current_uri {
             if let Some(document) = self.documents.get(uri) {
                 let root_obj = document.root_object.clone();
                 let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &root_obj);
-                return Self::process_resolve_result(&obj, is_found, member_name, word);
+                let (obj, member) = Self::process_resolve_result(&obj, is_found, member_name, word);
+                if obj.is_some() || member.is_some() {return (obj, member)}
             }
         }
 
         // Search from builtin_ctx
+        log::info!("find_obj in builtin: {}", word);
         let builtin = self.builtin_ctx.clone();
         let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &builtin);
         Self::process_resolve_result(&obj, is_found, member_name, word)
