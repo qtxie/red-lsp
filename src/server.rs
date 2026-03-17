@@ -282,18 +282,6 @@ impl RedLanguageServer {
                 }
             }
         }
-
-        // Parse edited lines and insert symbols (after releasing document borrow)
-        for line_num in lines_to_parse {
-            if let Some(document) = self.ctx.documents.get(&uri) {
-                let edited_line = document.content.line(line_num).to_string();
-                let str = match edited_line.rfind(|c| c == ' ' || c == '\t') {  // exclude last word which is editing
-                        Some(idx) => &edited_line[..idx],
-                        None => "", // no space or tab → return empty
-                    };
-                self.ctx.parse_line_and_insert_symbols(str);
-            }
-        }
     }
 
     fn handle_goto_definition(

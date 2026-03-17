@@ -294,6 +294,14 @@ impl ObjectGraph {
         // Start searching from the current scope
         let mut current_obj = current_scope.clone();
 
+        if parts.len() == 1 {
+            // check if it's a member of current scope
+            let ctx = current_scope.borrow().include_obj.clone().unwrap_or_else(|| current_scope.clone());
+            if let Some(member) = ctx.borrow().get_member(parts.first().unwrap()) && member.member_type != MemberType::Object {
+                return (current_scope.clone(), false, Some(parts.first().unwrap().to_string()));
+            }
+        }
+
         for (i, part) in parts.iter().enumerate() {
             // Find an object named part under the current path
 
@@ -396,16 +404,6 @@ impl Ctx {
         *self.node_kind_ids.get(kind_name).unwrap_or(&0)
     }
 
-    /// Parse single line text and extract symbols
-    pub fn parse_line_and_insert_symbols(&mut self, line_text: &str) {
-        let tree = self.parser.parse(line_text, None);
-        if let Some(tree) = tree {
-            let mut cursor = tree.walk();
-            self.walk_tree(line_text, &mut cursor, None);
-        }
-    }
-
-
     /// Get refinements from definition position
     fn get_refinements_from_member(&self, def: &ObjectMember) -> Option<Vec<ObjectMember>> {
         log::info!("member spec: {:?}", def.spec_content);
@@ -504,7 +502,7 @@ log::info!("find scopes: {:?}", scopes);
     }
 
     /// Helper function to process resolve_object_path result
-    fn process_resolve_result(obj: &Rc<RefCell<ObjectNode>>, is_found: bool, member_name: Option<String>, word: &str) -> (Option<Rc<RefCell<ObjectNode>>>, Option<ObjectMember>) {
+    fn process_resolve_result(obj: &Rc<RefCell<ObjectNode>>, is_found: bool, member_name: Option<String>) -> (Option<Rc<RefCell<ObjectNode>>>, Option<ObjectMember>) {
         let obj = obj.borrow().include_obj.clone().unwrap_or_else(|| obj.clone());
         if is_found {
             let member = member_name.and_then(|name| {
@@ -512,7 +510,7 @@ log::info!("find scopes: {:?}", scopes);
             });
             return (Some(obj.clone()), member);
         } else {
-            if let Some(member) = obj.borrow().get_member(word) {
+            if let Some(name) = member_name && let Some(member) = obj.borrow().get_member(&name) {
                 return (None, Some(member));
             }
         }
@@ -550,7 +548,7 @@ log::info!("find scopes: {:?}", scopes);
             if let Some(document) = self.documents.get(uri) {
                 let root_obj = document.root_object.clone();
                 let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &root_obj);
-                let (obj, member) = Self::process_resolve_result(&obj, is_found, member_name, word);
+                let (obj, member) = Self::process_resolve_result(&obj, is_found, member_name);
                 if obj.is_some() || member.is_some() {return (obj, member)}
             }
         }
@@ -559,7 +557,7 @@ log::info!("find scopes: {:?}", scopes);
         log::info!("find_obj in builtin: {}", word);
         let builtin = self.builtin_ctx.clone();
         let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &builtin);
-        Self::process_resolve_result(&obj, is_found, member_name, word)
+        Self::process_resolve_result(&obj, is_found, member_name)
     }
 
     /// Get object member completions
@@ -1110,7 +1108,7 @@ log::info!("find scopes: {:?}", scopes);
                                 _ => member_type = MemberType::Value,
                             }
                             if member_type != MemberType::Value {
-                                spec_content = get_node_text(source_code, &blk).map(|s| s.trim().trim_start_matches("[").trim_end_matches("]").to_string());
+                                spec_content = get_node_text(source_code, &blk).map(|s| trim_brackets(s.trim()).to_string());
                             }
                         }
                         cursor.goto_next_sibling();
@@ -1122,7 +1120,7 @@ log::info!("find scopes: {:?}", scopes);
                 member_type = MemberType::Function;
                 if let Some(spec_node) = node.child_by_field_name("spec") {
                     if spec_node.kind() == "block" {
-                        spec_content = get_node_text(source_code, &spec_node).map(|s| s.trim().trim_start_matches("[").trim_end_matches("]").to_string());
+                        spec_content = get_node_text(source_code, &spec_node).map(|s| trim_brackets(s.trim()).to_string());
                     }
                 }
             } else if kind_id == kind_context {
@@ -1642,4 +1640,22 @@ fn encode_semantic_tokens(tokens: Vec<(u32, u32, u32, u32, u32)>) -> Vec<Semanti
 
 pub fn is_any_func(t: MemberType) -> bool {
     t == MemberType::Action || t == MemberType::Function || t == MemberType::Native || t == MemberType::Routine
+}
+
+pub fn trim_brackets(s: &str) -> &str {
+    let mut start = 0;
+    let mut end = s.len();
+
+    // Count leading '['
+    let leading = s.chars().take_while(|&c| c == '[').count();
+
+    // Advance start
+    start += leading;
+
+    // Reduce end by same number of trailing ']'
+    let trailing = s.chars().rev().take_while(|&c| c == ']').count();
+    let remove = leading.min(trailing);
+    end -= remove;
+
+    &s[start..end]
 }
