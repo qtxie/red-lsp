@@ -469,21 +469,6 @@ fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&
     }
 }
 
-/// Get node text directly from a Rope without converting to String
-fn get_node_text_from_rope(rope: &Rope, node: &tree_sitter::Node) -> Option<String> {
-    let start_byte = node.start_byte();
-    let end_byte = node.end_byte();
-
-    if start_byte <= rope.len_bytes() && end_byte <= rope.len_bytes() && start_byte <= end_byte {
-        // Convert byte range to char range for Rope
-        let start_char = rope.byte_to_char(start_byte);
-        let end_char = rope.byte_to_char(end_byte);
-        Some(rope.slice(start_char..end_char).to_string())
-    } else {
-        None
-    }
-}
-
 impl Ctx {
     /// Get path completion suggestions (read from file system in real-time)
     pub fn get_path_completions(&self, prefix: &str, file_uri: &Uri) -> Vec<PathCompletionItem> {
@@ -552,9 +537,9 @@ log::info!("find scopes: {:?}", scopes);
                 });
                 return (Some(obj.clone()), member);
             } else {
-                if let Some(member) = obj.borrow().get_member(word) {
+                if let Some(name) = member_name && let Some(member) = obj.borrow().get_member(&name) {
                     log::info!("find_obj find member: {}", word);
-                   return (None, Some(member));
+                    return (None, Some(member));
                 }
             }
         }
@@ -1014,14 +999,15 @@ log::info!("find scopes: {:?}", scopes);
             obj_borrow.members.clear();
             obj_borrow.byte_range = (0, source_code.len());
             let file_path = file_uri.to_string();
+            obj_borrow.file_path = file_path.clone();
+            obj_borrow.scope_path = file_path.clone();
+            obj_borrow.name = file_path.clone();
             if cursor.goto_first_child() {
                 let mut scope_stack: Vec<String> = Vec::new();
                 scope_stack.push(file_path.clone());
                 self.parse_object_body(source_code, file_uri, cursor , &mut scope_stack, &mut *obj_borrow);
             }
-            obj_borrow.file_path = file_path.clone();
-            obj_borrow.scope_path = file_path.clone();
-            obj_borrow.name = file_path;
+            self.object_graph.objects.insert(file_path, obj.clone());
         }
         obj
     }
@@ -1107,6 +1093,7 @@ log::info!("find scopes: {:?}", scopes);
                             obj.byte_range = (node.start_byte(), blk.end_byte());
                             obj.file_path = uri.to_string();
                             scope_stack.push(member_name.clone());
+                            obj.scope_path = scope_stack.join("/");
                             let mut body_cursor = blk.walk();
                             if body_cursor.goto_first_child() {
                                 self.parse_object_body(source_code, uri, &mut body_cursor, scope_stack, &mut obj);
@@ -1145,6 +1132,7 @@ log::info!("find scopes: {:?}", scopes);
 
                 member_name = Self::extract_member_name(source_code, &node);
                 scope_stack.push(member_name.clone());
+                obj.scope_path = scope_stack.join("/");
 
                 if let Some(body_node) = node.child_by_field_name("body") {
                     let mut body_cursor = body_node.walk();
@@ -1197,6 +1185,7 @@ log::info!("find scopes: {:?}", scopes);
                     obj.file_path = uri.to_string();
                     member_name = ANONYMOUS_OBJ.to_string();
                     scope_stack.push(member_name.clone());
+                    obj.scope_path = scope_stack.join("/");
                     let mut body_cursor = blk.walk();
                     if body_cursor.goto_first_child() {
                         self.parse_object_body(source_code, uri, &mut body_cursor, scope_stack, &mut obj);
@@ -1214,6 +1203,9 @@ log::info!("find scopes: {:?}", scopes);
                 let node_start = node.start_byte();
                 let node_end = node.end_byte();
 
+                if let Some(spec) = &spec_content && spec.is_empty() {
+                    spec_content = None;
+                }
                 // Insert with case-insensitive key, store object_path for fast lookup in resolve
                 scope.members.insert(
                     &member_name,

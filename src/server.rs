@@ -332,14 +332,14 @@ impl RedLanguageServer {
         // Prefer using member's location information
         if let Some(member_info) = &member {
             if let (Some(byte_range), Some(object_path)) = (&member_info.byte_range, &member_info.object_path) {
-                log::info!("found member: {} at object {}", member_info.name, object_path);
+                log::info!("found member: {} at object {:?}", member_info.name, member_info.object_path);
                 // Get file_path from the object using object_path
                 let file_path = self.ctx.object_graph.get(object_path)
                     .map(|obj| obj.borrow().file_path.clone())
                     .unwrap_or_else(|| uri.to_string());
                 let range = self.byte_range_to_lsp_range(&file_path, *byte_range)?;
                 let target_uri = if file_path.starts_with("builtin://") {
-                    uri.clone()
+                    return None;
                 } else {
                     Uri::from_str(&file_path).unwrap_or_else(|_| uri.clone())
                 };
@@ -360,9 +360,9 @@ impl RedLanguageServer {
 
             let target_uri = if obj_ref.file_path.starts_with("builtin://") {
                 // Built-in definition, try to find source file
-                uri.clone()
+                return None;
             } else {
-                Uri::from_str(&obj_ref.file_path).unwrap_or_else(|_| uri.clone())
+                Uri::from_str(&obj_ref.file_path).unwrap_or(uri.clone())
             };
 
             return Some(GotoDefinitionResponse::Scalar(Location {
@@ -512,18 +512,6 @@ impl RedLanguageServer {
             .unwrap_or_default()
     }
 
-    /// Get node text
-    fn get_node_text<'a>(source_code: &'a str, node: &tree_sitter::Node) -> Option<&'a str> {
-        let start_byte = node.start_byte();
-        let end_byte = node.end_byte();
-
-        if start_byte <= source_code.len() && end_byte <= source_code.len() && start_byte <= end_byte {
-            Some(&source_code[start_byte..end_byte])
-        } else {
-            None
-        }
-    }
-
     /// Get node text directly from a Rope without converting to String
     fn get_node_text_from_rope(rope: &Rope, node: &tree_sitter::Node) -> Option<String> {
         let start_byte = node.start_byte();
@@ -580,15 +568,17 @@ impl RedLanguageServer {
 
         if let Some(document) = self.ctx.documents.get(&uri) {
             let start_pos = self.byte_to_position(&document.content, byte_range.0);
-            let end_pos = self.byte_to_position(&document.content, byte_range.1);
+            //let end_pos = self.byte_to_position(&document.content, byte_range.1);
             return Some(Range {
                 start: start_pos,
-                end: end_pos,
+                end: start_pos,
             });
         }
 
         // If file is not in open documents, try to read from file
-        if let Ok(content) = std::fs::read_to_string(file_path) {
+        let url = url::Url::parse(uri.as_str()).ok()?;
+        let path = url.to_file_path().ok()?;
+        if let Ok(content) = std::fs::read_to_string(path) {
             let rope = Rope::from_str(&content);
             let start_pos = self.byte_to_position(&rope, byte_range.0);
             let end_pos = self.byte_to_position(&rope, byte_range.1);
@@ -732,77 +722,111 @@ impl RedLanguageServer {
         Some(item)
     }
 
-    fn align_columns(items: &[(&str, &str)]) -> String {
+    fn align_columns(items: &[(String, String)], indent: usize) -> String {
         let max_len = items.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
         items.iter()
-            .map(|(name, ty)| format!("  {:<width$} {}", name, ty, width = max_len))
+            .map(|(name, ty)| format!("{:indent$}{:<width$} {}", "", name, ty, indent = indent, width = max_len))
             .collect::<Vec<_>>()
             .join("\n")
     }
 
-    fn pretty_spec(func_name: &str, input: &str) -> String {
-        let mut description = "";
-        let mut arguments = Vec::new();
-        let mut refinements = Vec::new();
-        let mut returns = "";
-        let mut usage = vec![func_name];
+    fn tokenize(input: &str) -> Vec<String> {
+        let mut tokens = Vec::new();
+        let mut buf = String::new();
+        let mut in_brace = false;
+        let mut in_quote = false;
+        let mut in_bracket = false;
 
-        let mut current_refine: Option<&str> = None;
-
-        for line in input.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() { continue; }
-
-            if trimmed.starts_with('{') && trimmed.ends_with('}') {
-                description = trimmed.trim_matches(|c| c == '{' || c == '}');
-                continue;
-            }
-
-            if trimmed.starts_with("return:") {
-                returns = trimmed["return:".len()..].trim();
-                continue;
-            }
-
-            if trimmed.starts_with('/') {
-                if let Some(idx) = trimmed.find('"') {
-                    let refine = trimmed[..idx].trim();
-                    let doc = trimmed[idx..].trim().trim_matches('"');
-                    refinements.push(format!("  {} => {}", refine, doc));
-                    current_refine = Some(refine);
-                } else if let Some(idx) = trimmed.find('{') {
-                    let refine = trimmed[..idx].trim();
-                    let doc = trimmed[idx..].trim().trim_matches(|c| c == '{' || c == '}');
-                    refinements.push(format!("  {} => {}", refine, doc));
-                    current_refine = Some(refine);
-                } else {
-                    refinements.push(format!("  {}", trimmed));
-                    current_refine = Some(trimmed);
-                }
-                continue;
-            }
-
-            if current_refine.is_some() {
-                // sub‑argument under refinement: indent 4 spaces total (2 + 2)
-                refinements.push(format!("    {}", trimmed));
-                current_refine = None;
-            } else {
-                if let Some(idx) = trimmed.find('[') {
-                    let name = trimmed[..idx].trim();
-                    let ty = trimmed[idx..].trim();
-                    arguments.push((name, ty));
-                    usage.push(&name);
-                }
+        for c in input.chars() {
+            match c {
+                '{' => { if !buf.trim().is_empty() { tokens.push(buf.trim().to_string()); } buf.clear(); in_brace = true; buf.push(c); }
+                '}' if in_brace => { buf.push(c); tokens.push(buf.trim().to_string()); buf.clear(); in_brace = false; }
+                '"' => { buf.push(c); if in_quote { tokens.push(buf.trim().to_string()); buf.clear(); } in_quote = !in_quote; }
+                '[' => { if !buf.trim().is_empty() { tokens.push(buf.trim().to_string()); } buf.clear(); in_bracket = true; buf.push(c); }
+                ']' if in_bracket => { buf.push(c); tokens.push(buf.trim().to_string()); buf.clear(); in_bracket = false; }
+                ' ' | '\n' if !in_brace && !in_quote && !in_bracket => { if !buf.is_empty() { tokens.push(buf.trim().to_string()); buf.clear(); } }
+                _ => buf.push(c),
             }
         }
+        if !buf.trim().is_empty() { tokens.push(buf.trim().to_string()); }
+        tokens
+    }
 
-        format!(
-            "{}\n\n---\n\n```red\nUSAGE:\n  {}\n\nARGUMENTS:\n{}\n\nREFINEMENTS:\n{}\n\nRETURNS:\n  {}\n```",
-            description,
-            usage.join(" "),
-            Self::align_columns(&arguments),
-            refinements.join("\n"),
-            returns
-        )
+    fn pretty_spec(func_name: &str, input: &str) -> String {
+        let mut description = String::new();
+        let mut arguments = Vec::new();
+        let mut refinements = Vec::new();
+        let mut returns = String::new();
+        let mut usage = vec![func_name.to_uppercase()];
+
+        let tokens = Self::tokenize(input);
+        let mut i = 0;
+         while i < tokens.len() {
+             let tok = &tokens[i];
+
+             if tok == "/local" { break; }
+
+             if tok.starts_with('{') && tok.ends_with('}') && description.is_empty() {
+                 description = tok.trim_matches(|c| c == '{' || c == '}').to_string();
+                 i += 1; continue;
+             }
+             if tok == "return:" {
+                 if i + 1 < tokens.len() { returns = tokens[i + 1].to_string(); i += 2; } else { i += 1; }
+                 continue;
+             }
+             if tok.starts_with('/') {
+                 let refine = tok.to_string();
+                 i += 1;
+                 // docstring
+                 if i < tokens.len() && (tokens[i].starts_with('"') || tokens[i].starts_with('{')) {
+                     let doc = tokens[i].trim_matches(|c| c == '"' || c == '{' || c == '}').to_string();
+                     refinements.push(format!("  {} => {}", refine, doc));
+                     i += 1;
+                 } else {
+                     refinements.push(format!("  {}", refine));
+                 }
+                 // sub‑arguments until next refinement/return/local
+                 while i + 1 < tokens.len() && !tokens[i].starts_with('/') && tokens[i] != "return:" && tokens[i] != "/local" {
+                     if tokens[i + 1].starts_with('[') {
+                         let name = tokens[i].clone();
+                         let ty = tokens[i + 1].clone();
+                         refinements.push(format!("    {:<8} {}", name, ty));
+                         i += 2;
+                     } else { i += 1; }
+                 }
+                 continue;
+             }
+
+             // arguments
+             if i + 1 < tokens.len() && tokens[i + 1].starts_with('[') {
+                 let name = tok.to_string();
+                 let ty = tokens[i + 1].to_string();
+                 arguments.push((name.clone(), ty));
+                 usage.push(name);
+                 i += 2;
+             } else { i += 1; }
+         }
+
+        let mut sections: Vec<String> = Vec::new();
+        if !description.is_empty() {
+            sections.push(description.to_string());
+        }
+        // USAGE is always shown
+        sections.push(format!("```red\nUSAGE:\n  {}", usage.join(" ")));
+
+        if !arguments.is_empty() {
+            sections.push(format!("ARGUMENTS:\n{}", Self::align_columns(&arguments, 2)));
+        }
+        if !refinements.is_empty() {
+            sections.push(format!("REFINEMENTS:\n{}", refinements.join("\n")));
+        }
+        if !returns.is_empty() {
+            sections.push(format!("RETURNS:\n  {}", returns));
+        }
+
+        let mut str = sections.join("\n\n");
+        str.push_str("\n```");
+        str
     }
 
     /// Format spec for item.detail: show only params, refinements and return type
@@ -1373,6 +1397,7 @@ fn handle_request(
             match serde_json::from_value::<GotoDefinitionParams>(req.params) {
                 Ok(params) => {
                     let result = server.handle_goto_definition(params);
+                    log::info!("result: {:?}", result);
                     Ok(Some(Response::new_ok(id, result)))
                 }
                 Err(_) => Ok(Some(Response::new_err(
