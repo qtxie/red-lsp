@@ -154,6 +154,7 @@ impl RedLanguageServer {
                     },
                 )),
                 definition_provider: Some(OneOf::Left(true)),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider,
                 semantic_tokens_provider,
                 ..Default::default()
@@ -367,6 +368,45 @@ impl RedLanguageServer {
         None
     }
 
+    fn handle_hover(&mut self, params: HoverParams) -> Option<Hover> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+        self.ctx.current_uri = Some(uri.clone());
+
+        let line_content = self.get_line_at_position(uri, position);
+        if line_content.is_empty() {
+            return None;
+        }
+
+        let byte_pos = self.get_byte_offset(uri, position);
+        let token = self.extract_path_from_tree(uri, byte_pos);
+
+        if token.is_empty() {
+            return None;
+        }
+
+        log::info!("hover for: '{}' at byte {}", token, byte_pos);
+
+        // Skip file paths
+        if token.starts_with('%') {
+            return None;
+        }
+
+        let file_path = uri.to_string();
+        let (_obj, member) = self.ctx.find_obj(&token, byte_pos, &file_path);
+
+        // Get function info from object_graph
+        if let Some(member_info) = &member {
+            if let Some(spec) = &member_info.spec_content {
+                let doc = Self::pretty_spec(&member_info.name, spec);
+                return Some(Hover {
+                        contents: HoverContents::Scalar(MarkedString::String(doc)),
+                        range: None,});
+             }
+        }
+        None
+    }
+
     /// Jump to file path
     fn goto_file_path(&self, file_path: &str, current_uri: &Uri) -> Option<GotoDefinitionResponse> {
         // Remove % prefix and possible quotes
@@ -488,7 +528,7 @@ impl RedLanguageServer {
                         if let Some(parent) = node.parent() && parent.kind() == "path" {
                             self.extract_path_to_cursor(&Self::get_node_text_from_rope(&document.content, &parent)?, byte_pos - parent.start_byte())
                         } else {
-                            Some(text.to_string())
+                            Some(text.trim_matches(':').to_string())
                         }
                     }
                     _ => {
@@ -519,7 +559,7 @@ impl RedLanguageServer {
         log::info!("extract_path_to_cursor: path='{}', cursor_offset={}", path, cursor_offset);
 
         // Split path by /
-        let parts: Vec<&str> = path.split('/').collect();
+        let parts: Vec<&str> = path.trim_matches(':').split('/').collect();
 
         let mut pos = 0;
         let mut result_parts: Vec<&str> = Vec::new();
@@ -1386,6 +1426,19 @@ fn handle_request(
                 Ok(params) => {
                     let result = server.handle_goto_definition(params);
                     log::info!("result: {:?}", result);
+                    Ok(Some(Response::new_ok(id, result)))
+                }
+                Err(_) => Ok(Some(Response::new_err(
+                    id,
+                    lsp_server::ErrorCode::InvalidParams as i32,
+                    "Invalid params".to_string(),
+                ))),
+            }
+        }
+        "textDocument/hover" => {
+            match serde_json::from_value::<HoverParams>(req.params) {
+                Ok(params) => {
+                    let result = server.handle_hover(params);
                     Ok(Some(Response::new_ok(id, result)))
                 }
                 Err(_) => Ok(Some(Response::new_err(
