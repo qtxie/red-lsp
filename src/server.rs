@@ -753,87 +753,173 @@ impl RedLanguageServer {
     fn align_columns(items: &[(String, String)], indent: usize) -> String {
         let max_len = items.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
         items.iter()
-            .map(|(name, ty)| format!("{:indent$}{:<width$} {}", "", name, ty, indent = indent, width = max_len))
+            .map(|(name, ty)| format!("{:indent$}{:<width$} {}", "", name, ty,
+                                      indent = indent, width = max_len))
             .collect::<Vec<_>>()
             .join("\n")
     }
 
+    fn format_block(name: &str, block: &str, base_indent: usize) -> String {
+        // Ensure block starts with [ and ends with ]
+        let inner = block.trim();
+        if !inner.starts_with("[") || !inner.ends_with("]") {
+            return format!("{:indent$}{} {}", "", name, block, indent = base_indent);
+        }
+
+        // Strip outer brackets
+        let content = &inner[1..inner.len()-1].trim();
+
+        // If this is a function! block, keep the keyword separate
+        let mut out = String::new();
+        if content.starts_with("function!") {
+            out.push_str(&format!("{:indent$}{} [function! [", "", name, indent = base_indent));
+            let body = content["function!".len()..].trim();
+            // Strip outer brackets of the function body
+            let body_inner = body.trim().trim_start_matches('[').trim_end_matches(']');
+            // Collect sub-arguments
+            let mut items = Vec::new();
+            let mut parts = body_inner.split_whitespace().peekable();
+            while let Some(tok) = parts.next() {
+                if let Some(next) = parts.peek() {
+                    if next.starts_with('[') {
+                        let ty = parts.next().unwrap();
+                        items.push((tok.to_string(), ty.to_string()));
+                    }
+                }
+            }
+            // Align sub-arguments
+            let max_len = items.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
+            for (n, ty) in items {
+                out.push_str("\n");
+                out.push_str(&format!("{:indent$}{:<width$} {}", "", n, ty,
+                                      indent = base_indent+2, width = max_len));
+            }
+            out.push_str("\n");
+            out.push_str(&format!("{:indent$}]]", "", indent = base_indent));
+        } else {
+            // Normal block
+            out.push_str(&format!("{:indent$}{} {}", "", name, block, indent = base_indent));
+        }
+        out
+    }
+
     fn tokenize(input: &str) -> Vec<String> {
         let mut tokens = Vec::new();
-        let mut buf = String::new();
-        let mut in_brace = false;
-        let mut in_quote = false;
-        let mut in_bracket = false;
+        let mut chars = input.chars().peekable();
 
-        for c in input.chars() {
+        while let Some(c) = chars.next() {
             match c {
-                '{' => { if !buf.trim().is_empty() { tokens.push(buf.trim().to_string()); } buf.clear(); in_brace = true; buf.push(c); }
-                '}' if in_brace => { buf.push(c); tokens.push(buf.trim().to_string()); buf.clear(); in_brace = false; }
-                '"' => { buf.push(c); if in_quote { tokens.push(buf.trim().to_string()); buf.clear(); } in_quote = !in_quote; }
-                '[' => { if !buf.trim().is_empty() { tokens.push(buf.trim().to_string()); } buf.clear(); in_bracket = true; buf.push(c); }
-                ']' if in_bracket => { buf.push(c); tokens.push(buf.trim().to_string()); buf.clear(); in_bracket = false; }
-                ' ' | '\n' if !in_brace && !in_quote && !in_bracket => { if !buf.is_empty() { tokens.push(buf.trim().to_string()); buf.clear(); } }
-                _ => buf.push(c),
+                '"' => {
+                    // start of quoted string
+                    let mut buf = String::new();
+                    buf.push('"');
+                    while let Some(&next) = chars.peek() {
+                        buf.push(next);
+                        chars.next();
+                        if next == '"' {
+                            // closing quote
+                            break;
+                        }
+                    }
+                    tokens.push(buf);
+                }
+                '{' => {
+                    let mut buf = String::new();
+                    buf.push('{');
+                    while let Some(&next) = chars.peek() {
+                        buf.push(next);
+                        chars.next();
+                        if next == '}' {
+                            break;
+                        }
+                    }
+                    tokens.push(buf);
+                }
+                '[' => {
+                    let mut buf = String::new();
+                    buf.push('[');
+                    let mut depth = 1;
+                    while let Some(&next) = chars.peek() {
+                        buf.push(next);
+                        chars.next();
+                        if next == '[' { depth += 1; }
+                        if next == ']' {
+                            depth -= 1;
+                            if depth == 0 { break; }
+                        }
+                    }
+                    tokens.push(buf);
+                }
+                ' ' | '\n' => continue,
+                _ => {
+                    let mut buf = String::new();
+                    buf.push(c);
+                    while let Some(&next) = chars.peek() {
+                        if next == ' ' || next == '\n' || next == '{' || next == '"' || next == '[' {
+                            break;
+                        }
+                        buf.push(next);
+                        chars.next();
+                    }
+                    tokens.push(buf);
+                }
             }
         }
-        if !buf.trim().is_empty() { tokens.push(buf.trim().to_string()); }
         tokens
     }
 
     fn pretty_spec(func_name: &str, input: &str) -> String {
         let mut description = String::new();
         let mut arguments = Vec::new();
-        let mut refinements = Vec::new();
+        let mut refinements: Vec<(String, Option<String>, Vec<(String,String)>)> = Vec::new();
         let mut returns = String::new();
         let mut usage = vec![func_name.to_uppercase()];
 
         let tokens = Self::tokenize(input);
         let mut i = 0;
-         while i < tokens.len() {
-             let tok = &tokens[i];
+        while i < tokens.len() {
+            let tok = &tokens[i];
 
-             if tok == "/local" { break; }
+            if tok == "/local" { break; }
 
-             if tok.starts_with('{') && tok.ends_with('}') && description.is_empty() {
-                 description = tok.trim_matches(|c| c == '{' || c == '}').to_string();
-                 i += 1; continue;
-             }
-             if tok == "return:" {
-                 if i + 1 < tokens.len() { returns = tokens[i + 1].to_string(); i += 2; } else { i += 1; }
-                 continue;
-             }
-             if tok.starts_with('/') {
-                 let refine = tok.to_string();
-                 i += 1;
-                 // docstring
-                 if i < tokens.len() && (tokens[i].starts_with('"') || tokens[i].starts_with('{')) {
-                     let doc = tokens[i].trim_matches(|c| c == '"' || c == '{' || c == '}').to_string();
-                     refinements.push(format!("  {} => {}", refine, doc));
-                     i += 1;
-                 } else {
-                     refinements.push(format!("  {}", refine));
-                 }
-                 // sub‑arguments until next refinement/return/local
-                 while i + 1 < tokens.len() && !tokens[i].starts_with('/') && tokens[i] != "return:" && tokens[i] != "/local" {
-                     if tokens[i + 1].starts_with('[') {
-                         let name = tokens[i].clone();
-                         let ty = tokens[i + 1].clone();
-                         refinements.push(format!("    {:<8} {}", name, ty));
-                         i += 2;
-                     } else { i += 1; }
-                 }
-                 continue;
-             }
+            if (tok.starts_with('{') && tok.ends_with('}')) || (tok.starts_with('"') && tok.ends_with('"')) {
+                if description.is_empty() {
+                    description = tok.trim_matches(|c| c == '{' || c == '}' || c == '"').to_string();
+                }
+                i += 1; continue;
+            }
+            if tok == "return:" {
+                if i + 1 < tokens.len() { returns = tokens[i + 1].to_string(); i += 2; } else { i += 1; }
+                continue;
+            }
+            if tok.starts_with('/') {
+                let refine = tok.to_string();
+                i += 1;
+                let mut doc: Option<String> = None;
+                if i < tokens.len() && (tokens[i].starts_with('"') || tokens[i].starts_with('{')) {
+                    doc = Some(tokens[i].trim_matches(|c| c == '"' || c == '{' || c == '}').to_string());
+                    i += 1;
+                }
+                let mut subs = Vec::new();
+                while i + 1 < tokens.len() && !tokens[i].starts_with('/') && tokens[i] != "return:" && tokens[i] != "/local" {
+                    if tokens[i + 1].starts_with('[') {
+                        subs.push((tokens[i].clone(), tokens[i + 1].clone()));
+                        i += 2;
+                    } else { i += 1; }
+                }
+                refinements.push((refine, doc, subs));
+                continue;
+            }
 
-             // arguments
-             if i + 1 < tokens.len() && tokens[i + 1].starts_with('[') {
-                 let name = tok.to_string();
-                 let ty = tokens[i + 1].to_string();
-                 arguments.push((name.clone(), ty));
-                 usage.push(name);
-                 i += 2;
-             } else { i += 1; }
-         }
+            // arguments
+            if i + 1 < tokens.len() && tokens[i + 1].starts_with('[') {
+                let name = tok.to_string();
+                let ty = tokens[i + 1].to_string();
+                arguments.push((name.clone(), ty));
+                usage.push(name);
+                i += 2;
+            } else { i += 1; }
+        }
 
         let mut sections: Vec<String> = Vec::new();
         if !description.is_empty() {
@@ -846,7 +932,34 @@ impl RedLanguageServer {
             sections.push(format!("ARGUMENTS:\n{}", Self::align_columns(&arguments, 2)));
         }
         if !refinements.is_empty() {
-            sections.push(format!("REFINEMENTS:\n{}", refinements.join("\n")));
+            let mut out = String::new();
+            let max_len = refinements.iter()
+                    .flat_map(|(_,_,subs)| subs.iter().map(|(n,_)| n.len()))
+                    .max()
+                    .unwrap_or(0);
+            // compute max length for refinement names
+            let max_refine_len = refinements.iter()
+                .map(|(r,_,_)| r.len())
+                .max()
+                .unwrap_or(0);
+            for (refine, doc, subs) in refinements {
+                if let Some(doc) = doc {
+                    // align "=>" across all refinements
+                    out.push_str(&format!("  {:<width$} => {}\n", refine, doc, width=max_refine_len));
+                } else {
+                    out.push_str(&format!("  {}\n", refine));
+                }
+                if !subs.is_empty() {
+                    for (n, ty) in subs {
+                        if ty.contains('\n') {
+                            out.push_str(&Self::format_block(&n, &ty, 4));
+                        } else {
+                            out.push_str(&format!("    {:<width$} {}\n", n, ty, width=max_len));
+                        }
+                    }
+                }
+            }
+            sections.push(format!("REFINEMENTS:\n{}", out.trim_end()));
         }
         if !returns.is_empty() {
             sections.push(format!("RETURNS:\n  {}", returns));
