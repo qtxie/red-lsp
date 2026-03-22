@@ -45,7 +45,7 @@ jobs:
             archive_type: tar.gz
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Extract version
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
@@ -94,7 +94,7 @@ jobs:
           Compress-Archive -Path "target\${{ matrix.target }}\release\$binaryName" -DestinationPath "$archiveName" -Force
         shell: pwsh
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset_name }}
           path: red-lsp-*.${{ matrix.archive_type }}
@@ -105,13 +105,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Extract version
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         shell: bash
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
       - name: Display structure of downloaded files
         run: ls -R
       - name: Flatten directory structure and rename files
