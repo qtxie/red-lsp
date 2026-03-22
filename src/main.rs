@@ -7,14 +7,16 @@ use server::run_server;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    
-    // Initialize logger based on mode
+
+    // Initialize logger based on build mode
     let log_level = if args.iter().any(|arg| arg == "--verbose") {
         log::LevelFilter::Debug
-    } else {
+    } else if cfg!(debug_assertions) {
         log::LevelFilter::Info
+    } else {
+        log::LevelFilter::Error
     };
-    
+
     env_logger::Builder::new()
         .filter_level(log_level)
         .init();
