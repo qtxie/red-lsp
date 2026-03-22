@@ -5,11 +5,13 @@ Red-LSP is a language server for the Red programming language, implementing the 
 ## Features
 
 - **Go to Definition**: Navigate to the definition of functions, variables, and other symbols in your Red code
+- **Hover**: View documentation and type information for functions, variables, and other symbols
 - **Code Completion**: Get intelligent suggestions for Red keywords, functions, and variables
 - **Semantic Highlighting**: Syntax highlighting support through LSP semantic tokens
 - **Incremental Parsing**: Efficient document updates using [tree-sitter-red](https://github.com/red/tree-sitter-red)
 - **Multiple Transport Modes**: Supports both STDIO and TCP connections
 - **Position Encoding Negotiation**: Supports UTF-8, UTF-16, and UTF-32 encodings
+- **Built-in Functions Support**: Comprehensive Red built-in functions completion and navigation
 
 ## Usage
 
@@ -54,3 +56,7 @@ cd red-lsp
 # Build the project
 cargo build --release
 ```
+
+## License
+
+MIT
