@@ -191,7 +191,7 @@ impl ObjectGraph {
         // Search all objects for a member with the given name
         for (_, obj) in &self.objects {
             if let Some(member) = obj.borrow().get_member(name) {
-                if member.member_type == MemberType::Function {
+                if is_any_func(member.member_type.clone()) {
                     return Some(member);
                 }
             }
@@ -204,7 +204,7 @@ impl ObjectGraph {
         // Get the object directly using object_path
         if let Some(obj) = self.objects.get(object_path) {
             if let Some(member) = obj.borrow().get_member(name) {
-                if member.member_type == MemberType::Function {
+                if is_any_func(member.member_type.clone()) {
                     return Some(member);
                 }
             }
@@ -313,9 +313,9 @@ impl ObjectGraph {
                 let obj = obj.borrow().include_obj.clone().unwrap_or_else(|| obj.clone());
                 if i == parts.len() - 1 {
                     // Last part, return the object
-                    return (obj.clone(), true, None);
+                    return (obj, true, None);
                 }
-                current_obj = obj.clone();
+                current_obj = obj;
             } else {
                 // part might be a function
                 return (current_obj, false, Some(part.to_string()));
@@ -557,7 +557,43 @@ log::info!("find scopes: {:?}", scopes);
         log::info!("find_obj in builtin: {}", word);
         let builtin = self.builtin_ctx.clone();
         let (obj, is_found, member_name) = self.object_graph.resolve_object_path(word, &builtin);
-        Self::process_resolve_result(&obj, is_found, member_name)
+        let (obj, member) = Self::process_resolve_result(&obj, is_found, member_name);
+        if obj.is_some() || member.is_some() {return (obj, member)}
+
+        log::info!("find_obj in name_to_scopes {}", word);
+        let parts: Vec<&str> = word.split('/').filter(|s| !s.is_empty()).collect();
+        if let Some(start_word) = parts.first() {
+            let normalized_name = NormalizedName::from(start_word.to_string());
+            if let Some(scopes) = self.object_graph.name_to_scopes.get(&normalized_name) {
+                for scope in scopes {
+                    if let Some(obj) = self.object_graph.objects.get(scope) {
+                        let mut current_ctx = obj.clone();
+                        for (i, part) in parts.iter().enumerate() {
+                            if parts.len() == 1 {
+                                return (Some(current_ctx), None);
+                            }
+                            if i == 0 {continue;}
+
+                            let ctx = current_ctx.borrow().include_obj.clone().unwrap_or_else(|| current_ctx.clone());
+                            let found = self.object_graph.find_child_object(&ctx, part);
+
+                            if let Some(obj2) = found {
+                                let obj2 = obj2.borrow().include_obj.clone().unwrap_or_else(|| obj2.clone());
+                                if i == parts.len() - 1 {
+                                    // Last part, return the object
+                                    return (Some(obj2), None);
+                                }
+                                current_ctx = obj2;
+                            } else {
+                                // part might be a function
+                                return Self::process_resolve_result(&current_ctx, false, Some(part.to_string()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        (None, None)
     }
 
     /// Get object member completions
@@ -1354,7 +1390,7 @@ log::info!("highlight Path node: start_word {}", start_word);
         let length = end_col - start_col - 1; // remove last "/"
         if let Some(m) = &member {
             log::info!("highlight path member2: {:?}", m);
-            if m.member_type == MemberType::Function {
+            if is_any_func(m.member_type.clone()) {
                 tokens.push((path_start.start_position().row as u32, start_col, length, TokenType::RedFunction as u32, 0));
                 return;
             }

@@ -750,7 +750,7 @@ impl RedLanguageServer {
         Some(item)
     }
 
-    fn align_columns(items: &[(String, String)], indent: usize) -> String {
+    fn align_columns(items: &[(&str, &str)], indent: usize) -> String {
         let max_len = items.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
         items.iter()
             .map(|(name, ty)| format!("{:indent$}{:<width$} {}", "", name, ty,
@@ -870,8 +870,8 @@ impl RedLanguageServer {
 
     fn pretty_spec(func_name: &str, input: &str) -> String {
         let mut description = String::new();
-        let mut arguments = Vec::new();
-        let mut refinements: Vec<(String, Option<String>, Vec<(String,String)>)> = Vec::new();
+        let mut arguments: Vec<(&str, &str)> = Vec::new();
+        let mut refinements: Vec<(&str, Option<&str>, Vec<(&str,&str)>)> = Vec::new();
         let mut returns = String::new();
         let mut usage = vec![func_name.to_uppercase()];
 
@@ -893,17 +893,17 @@ impl RedLanguageServer {
                 continue;
             }
             if tok.starts_with('/') {
-                let refine = tok.to_string();
+                let refine = tok;
                 i += 1;
-                let mut doc: Option<String> = None;
+                let mut doc: Option<&str> = None;
                 if i < tokens.len() && (tokens[i].starts_with('"') || tokens[i].starts_with('{')) {
-                    doc = Some(tokens[i].trim_matches(|c| c == '"' || c == '{' || c == '}').to_string());
+                    doc = Some(tokens[i].trim_matches(|c| c == '"' || c == '{' || c == '}'));
                     i += 1;
                 }
-                let mut subs = Vec::new();
+                let mut subs: Vec<(&str, &str)> = Vec::new();
                 while i + 1 < tokens.len() && !tokens[i].starts_with('/') && tokens[i] != "return:" && tokens[i] != "/local" {
                     if tokens[i + 1].starts_with('[') {
-                        subs.push((tokens[i].clone(), tokens[i + 1].clone()));
+                        subs.push((&tokens[i], &tokens[i + 1]));
                         i += 2;
                     } else { i += 1; }
                 }
@@ -913,10 +913,10 @@ impl RedLanguageServer {
 
             // arguments
             if i + 1 < tokens.len() && tokens[i + 1].starts_with('[') {
-                let name = tok.to_string();
-                let ty = tokens[i + 1].to_string();
-                arguments.push((name.clone(), ty));
-                usage.push(name);
+                let name = tok;
+                let ty = &tokens[i + 1];
+                arguments.push((name, ty));
+                usage.push(name.to_string());
                 i += 2;
             } else { i += 1; }
         }
