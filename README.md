@@ -13,6 +13,9 @@ Red-LSP is a language server for the Red programming language, implementing the 
 - **Position Encoding Negotiation**: Supports UTF-8, UTF-16, and UTF-32 encodings
 - **Built-in Functions Support**: Comprehensive Red built-in functions completion and navigation
 
+<img width="1073" height="841" alt="image" src="https://github.com/user-attachments/assets/18049a1f-5abb-40b8-bc0f-a8c89eee0f53" />
+<img width="2002" height="1157" alt="image" src="https://github.com/user-attachments/assets/d4447a4b-3d27-4bd8-80d4-16021ef11d77" />
+
 ## Usage
 
 ### Standard IO Mode (Default)
@@ -56,6 +59,8 @@ cd red-lsp
 # Build the project
 cargo build --release
 ```
+
+PS. More than 90% of the code are written by AI.
 
 ## License
 
